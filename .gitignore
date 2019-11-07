@@ -1,0 +1,4 @@
+*.swp
+program.exe
+obj
+*.modinfo.json
