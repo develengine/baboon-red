@@ -76,7 +76,7 @@ void init() {
 
     window = SDL_CreateWindow(
         "bones.",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
         1080, 720,
         SDL_WINDOW_OPENGL
     );

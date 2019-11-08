@@ -225,13 +225,48 @@ const uint32_t ScanCodes[] {
 
 bool keyStates[KEY_COUNT];
 
+uint32_t windowType = 0;
+#ifdef _WIN32
+const uint32_t FULLSCREEN = SDL_WINDOW_FULLSCREEN;
+#else
+const uint32_t FULLSCREEN = SDL_WINDOW_FULLSCREEN_DESKTOP;
+#endif
+
+bool cursorEnabled = false;
+
 void keyCallback(SDL_Event &event, bool down) {
     SDL_Scancode scancode = event.key.keysym.scancode;
     for (int i = 0; i < KEY_COUNT; i++) {
         if (scancode == ScanCodes[i]) {
             keyStates[i] = down;
-            break;
+            return;
         }
+    }
+    if (!down) return;
+    switch (scancode) {
+
+        case SDL_SCANCODE_F11:
+            if (windowType == 0) {
+                windowType = FULLSCREEN;
+            } else {
+                windowType = 0;
+            }
+            if (SDL_SetWindowFullscreen(Application::window, windowType) != 0) {
+                std::cerr << "Failed to change window! Error: " << SDL_GetError() << '\n';
+            }
+            break;
+
+        case SDL_SCANCODE_LALT:
+            SDL_ShowCursor(cursorEnabled ? SDL_FALSE : SDL_TRUE);
+            SDL_SetRelativeMouseMode(cursorEnabled ? SDL_TRUE : SDL_FALSE);
+            cursorEnabled = !cursorEnabled;
+            break;
+
+        case SDL_SCANCODE_ESCAPE:
+            Application::running = false;
+            break;
+
+        default : return;
     }
 }
 
@@ -355,17 +390,21 @@ int main(int argc, char *argv[]) {
     eng::Vec2f cameraRot(0.f, 0.f);
     eng::Vec3f objPos(-1.0f, 2.0f,-0.5);
 
-    Application::setMouseMotionCallback([&](SDL_Event &event) {
-        cameraRot[0] += (float)(event.motion.yrel) / 256.f;
-        cameraRot[1] += (float)(event.motion.xrel) / 256.f;
-    });
-
     eng::Vec2f rPos(-0.5f, 0.5f);
     eng::Vec2f rScl(0.25f, 0.25f);
 
     auto tp1 = std::chrono::high_resolution_clock::now();
     float deltaTime = 0.0f;
     double timePassed = 0.0;
+
+    int wWidth, wHeight;
+    SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
+
+    Application::setMouseMotionCallback([&](SDL_Event &event) {
+        if (cursorEnabled) return;
+        cameraRot[0] += (float)(event.motion.yrel) / 256.f;
+        cameraRot[1] += (float)(event.motion.xrel) / 256.f;
+    });
 
     while (Application::running) {
         Application::pollEvents();
@@ -409,12 +448,11 @@ int main(int argc, char *argv[]) {
             cameraRot[1] += speed * .2f;
         }
 
-        int wWidth, wHeight;
-        SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
-
         eng::Vec3f axis = eng::Vec3f(1.0f, 1.0f, 1.0f) * sin(timePassed * 0.8f);
         eng::Quaternionf roter(cos(timePassed * 0.8f), axis.data);
         auto rotPos = roter.conjugate() * eng::Quaternionf(0.0f, objPos.data) * roter;
+
+        SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
 
         eng::Mat4f modeMat = eng::Mat4f::translation(rotPos.i, rotPos.j, rotPos.k)
             * eng::Mat4f::rotation(roter.normalize());
@@ -463,10 +501,14 @@ int main(int argc, char *argv[]) {
     }
 
     shader.free();
+    rectShader.free();
 
     glDeleteBuffers(1, &vbo);
     glDeleteBuffers(1, &ibo);
     glDeleteVertexArrays(1, &vao);
+
+    glDeleteBuffers(1, &rectVbo);
+    glDeleteVertexArrays(1, &rectVao);
 
     Application::close();
 
