@@ -15,9 +15,9 @@ class Texture {
     uint32_t textureId;
 
 public:
-    Texture(const TexParameters &parameters);
+    Texture(const TexParameters &parameters, bool mipmap = true);
 
-    void bind(uint32_t slot, bool activate);
+    void bind(uint32_t slot = 0, bool activate = false);
 
     void free();
 

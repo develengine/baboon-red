@@ -179,13 +179,27 @@ void nCillinder(
 
 float rectangleVertices[] = {
      1.0f,-1.0f,  1.0f, 1.0f,
-     1.0f, 1.0f,  1.0f, 0.0f,
-    -1.0f, 1.0f,  0.0f, 0.0f,
+     1.0f, 0.0f,  1.0f, 0.0f,
+     0.0f, 0.0f,  0.0f, 0.0f,
 
-    -1.0f,-1.0f,  0.0f, 1.0f,
+     0.0f,-1.0f,  0.0f, 1.0f,
      1.0f,-1.0f,  1.0f, 1.0f,
-    -1.0f, 1.0f,  0.0f, 0.0f
+     0.0f, 0.0f,  0.0f, 0.0f
 };
+
+const int STRING_BUFFER_LENGTH = 2048;
+
+uint8_t charBuffer[STRING_BUFFER_LENGTH] = { 0 };
+
+void bufferChars(const char *str, int offset, int count) {
+    for (int i = 0; i < count; i++) {
+        uint8_t c = (uint8_t)(str[i]);
+        if (c == 0) {
+            break;
+        }
+        charBuffer[offset + i] = c;
+    }
+}
 
 enum KeySigns {
     KEY_W,
@@ -282,6 +296,9 @@ int main(int argc, char *argv[]) {
     uint32_t *inds = new uint32_t[nCillinderIC(POINT_COUNT)];
     nCillinder(POINT_COUNT, verts, inds, &texInfo);
 
+    const char *boi = "abcdefghijklmnopqrtsuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    bufferChars(boi, 0, strlen(boi));
+
     Application::init();
     Application::setKeyCallback(keyCallback);
 
@@ -290,6 +307,10 @@ int main(int argc, char *argv[]) {
     glFrontFace(GL_CCW);
     glCullFace(GL_BACK);
 //     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+// Vao stuff
 
     uint32_t vao;
     glGenVertexArrays(1, &vao);
@@ -315,6 +336,8 @@ int main(int argc, char *argv[]) {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, nCillinderIC(POINT_COUNT) * sizeof(uint32_t), inds, GL_STATIC_DRAW);
 
     glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     delete[] inds;
     delete[] verts;
@@ -335,13 +358,43 @@ int main(int argc, char *argv[]) {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
+
+    uint32_t textVao;
+    glGenVertexArrays(1, &textVao);
+    glBindVertexArray(textVao);
+
+    uint32_t textVbo;
+    glGenBuffers(1, &textVbo);
+    glBindBuffer(GL_ARRAY_BUFFER, textVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(rectangleVertices), rectangleVertices, GL_STATIC_DRAW);
+    
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    uint32_t stringBuffer;
+    glGenBuffers(1, &stringBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, stringBuffer);
+    glBufferData(GL_ARRAY_BUFFER, STRING_BUFFER_LENGTH, charBuffer, GL_DYNAMIC_DRAW);
+
+    glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(uint8_t), (void*)0);
+    glEnableVertexAttribArray(2);
+
+    glVertexAttribDivisor(2, 1);
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+// Texture stuff
 
     int width, height, channelCount;
     stbi_set_flip_vertically_on_load(false);
     uint8_t *data = stbi_load("../cringe/kringo.png", &width, &height, &channelCount, STBI_rgb_alpha);
-
     if (!data) {
         std::cerr << "Failed to load image\n";
         exit(-1);
@@ -356,6 +409,28 @@ int main(int argc, char *argv[]) {
     };
 
     Texture texture(parameters);
+
+    free(data);
+
+    int widthC, heightC, channelCountC;
+    uint8_t *img = stbi_load("../cringe/charsheet.png", &widthC, &heightC, &channelCountC, STBI_rgb_alpha);
+    if (!img) {
+        std::cerr << "Failed to load image\n";
+        exit(-1);
+    }
+
+    parameters.minFilter = GL_NEAREST;
+    parameters.data = img;
+    parameters.width = widthC;
+    parameters.height = heightC;
+    parameters.deviceFormat = GL_RED;
+
+    Texture charSheet(parameters, false);
+
+    free(img);
+
+
+// Shader stuff
 
     GraphicShader shader(
         GraphicShader::load("shaders/shader.vert"),
@@ -380,18 +455,27 @@ int main(int argc, char *argv[]) {
 
     rectShader.use();
     glUniform1i(rectShader.getUniform("u_sampler"), 0);
-    
+
+    GraphicShader textShader(
+        GraphicShader::load("shaders/text.vert"),
+        GraphicShader::load("shaders/text.frag")
+    );
+
+    int textTrans = textShader.getUniform("u_transform");
+    int textColor = textShader.getUniform("u_textColor");
+
+    textShader.use();
+    glUniform1i(textShader.getUniform("u_charSheet"), 1);
     GraphicShader::useNone();
 
-
-    texture.bind(0, true);
+// Doo doo
 
     eng::Vec3f cameraPos(0.f, 0.f, 3.f);
     eng::Vec2f cameraRot(0.f, 0.f);
     eng::Vec3f objPos(-1.0f, 2.0f,-0.5);
 
     eng::Vec2f rPos(-0.5f, 0.5f);
-    eng::Vec2f rScl(0.25f, 0.25f);
+    eng::Vec2f rScl(0.5f, 0.5f);
 
     auto tp1 = std::chrono::high_resolution_clock::now();
     float deltaTime = 0.0f;
@@ -467,6 +551,8 @@ int main(int argc, char *argv[]) {
         glClearColor(0.35f, 0.4f, 0.8f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        texture.bind(0, true);
+
         glBindVertexArray(vao);
 
         shader.use();
@@ -477,13 +563,25 @@ int main(int argc, char *argv[]) {
         glUniform3fv(camPos, 1, cameraPos.data);
         glUniform3f(objColor, 0.8f, 0.7f, 0.45f);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
         glDrawElements(GL_TRIANGLES, nCillinderIC(POINT_COUNT), GL_UNSIGNED_INT, (void*)(0));
 
-        glDisable(GL_DEPTH_TEST);
-        glBindVertexArray(rectVao);
 
+        glDisable(GL_DEPTH_TEST);
+
+        glBindVertexArray(textVao);
+        textShader.use();
+
+        charSheet.bind(1, true);
+
+        glUniform4f(textTrans,-0.9f,-0.5f, 8.f / 540.f, 16.f / 360.f);
+        glUniform4f(textColor, 1.0f, 1.0f, 1.0f, 1.0f);
+
+        glDrawArraysInstancedBaseInstance(GL_TRIANGLES, 0, 6, strlen(boi), 0);
+
+
+        glBindVertexArray(rectVao);
         rectShader.use();
+        texture.bind(0, true);
 
         glUniform2fv(rPosition, 1, rPos.data);
         glUniform2fv(rScale, 1, rScl.data);
@@ -491,6 +589,7 @@ int main(int argc, char *argv[]) {
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         glEnable(GL_DEPTH_TEST);
+
 
         SDL_GL_SwapWindow(Application::window);
 
@@ -502,6 +601,7 @@ int main(int argc, char *argv[]) {
 
     shader.free();
     rectShader.free();
+    textShader.free();
 
     glDeleteBuffers(1, &vbo);
     glDeleteBuffers(1, &ibo);
@@ -509,6 +609,10 @@ int main(int argc, char *argv[]) {
 
     glDeleteBuffers(1, &rectVbo);
     glDeleteVertexArrays(1, &rectVao);
+
+    glDeleteBuffers(1, &textVbo);
+    glDeleteBuffers(1, &stringBuffer);
+    glDeleteVertexArrays(1, &textVao);
 
     Application::close();
 

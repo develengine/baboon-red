@@ -2,7 +2,7 @@
 
 #include <glad/glad.h>
 
-Texture::Texture(const TexParameters &parameters) {
+Texture::Texture(const TexParameters &parameters, bool mipmap) {
     glGenTextures(1, &textureId);
     glBindTexture(GL_TEXTURE_2D, textureId);
 
@@ -11,8 +11,21 @@ Texture::Texture(const TexParameters &parameters) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, parameters.minFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, parameters.magFilter);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, parameters.deviceFormat, parameters.width, parameters.height, 0, parameters.deviceFormat, parameters.formatType, parameters.data);
-    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        parameters.deviceFormat,
+        parameters.width,
+        parameters.height,
+        0,
+        parameters.localFormat,
+        parameters.formatType,
+        parameters.data
+    );
+
+    if (mipmap) {
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
 
     glBindTexture(GL_TEXTURE_2D, 0);
 }
