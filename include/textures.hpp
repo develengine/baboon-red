@@ -12,10 +12,13 @@ struct TexParameters {
 
 class Texture {
 
-    uint32_t textureId;
+    uint32_t textureId = 0;
 
 public:
     Texture(const TexParameters &parameters, bool mipmap = true);
+    Texture() = default;
+
+    void generate(const TexParameters &parameters, bool mipmap = true);
 
     void bind(uint32_t slot = 0, bool activate = false);
 

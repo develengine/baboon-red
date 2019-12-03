@@ -5,14 +5,17 @@
 #include <stdint.h>
 
 class GraphicShader {
-    uint32_t vertexShader;
-    uint32_t fragmentShader;
-    uint32_t programId;
+    uint32_t vertexShader = 0;
+    uint32_t fragmentShader = 0;
+    uint32_t programId = 0;
 
     bool alive = true;
 
 public:
-    GraphicShader(std::string vert, std::string frag);
+    GraphicShader(const std::string &vert, const std::string &frag);
+    GraphicShader() = default;
+
+    void generate(const std::string &vert, const std::string &frag);
 
     uint32_t id();
     int getUniform(std::string name);

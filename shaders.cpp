@@ -6,7 +6,11 @@
 #include <fstream>
 #include <streambuf>
 
-GraphicShader::GraphicShader(std::string vert, std::string frag) {
+GraphicShader::GraphicShader(const std::string &vert, const std::string &frag) {
+    generate(vert, frag);
+}
+
+void GraphicShader::generate(const std::string &vert, const std::string &frag) {
     int succes;
     char infoLog[512];
 

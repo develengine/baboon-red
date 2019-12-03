@@ -9,11 +9,10 @@
 #include <chrono>
 
 #include <cmath>
+#include <climits>
 
 #include "math.hpp"
-#include "objmf.hpp"
-#include "shaders.hpp"
-#include "textures.hpp"
+#include "oglcore.hpp"
 
 float cubeVertices[] = {
      1.0f, 1.0f, 1.0f,  0.0f, 0.0f, 1.0f,
@@ -187,21 +186,274 @@ float rectangleVertices[] = {
      0.0f, 0.0f,  0.0f, 0.0f
 };
 
-const int STRING_BUFFER_LENGTH = 2048;
 
-uint8_t charBuffer[STRING_BUFFER_LENGTH] = { 0 };
 
-void bufferChars(const char *str, int offset, int count) {
-    for (int i = 0; i < count; i++) {
-        uint8_t c = (uint8_t)(str[i]);
-        if (c == 0) {
-            break;
+namespace eng {
+
+int ustrlen(const uint8_t *str)
+{
+    int i = 0;
+    while (str[i] != 0) {
+        ++i;
+    }
+    return i;
+}
+
+void strToUStr(
+    const char *str,
+    uint8_t *dest,
+    const  uint8_t *subs = nullptr,
+    char del = '%'
+) {
+    int subIndex = 0;
+    int i = 0;
+    char c = 0;
+    if (subs == nullptr) {
+        while ((c = str[i]) != 0) {
+            dest[i] = (uint8_t)c;
+            i++;
         }
-        charBuffer[offset + i] = c;
+    } else {
+        while ((c = str[i]) != 0) {
+            if (c == del) {
+                dest[i] = subs[subIndex++];
+            } else {
+                dest[i] = (uint8_t)c;
+            }
+            i++;
+        }
+    }
+    dest[i] = 0;
+}
+
+template<typename T, uint32_t N>
+class WrapStack {
+public:
+    int dataPointer = 0;
+    int pushCounter = 0;
+    T data[N];
+
+    inline int size() const
+    {
+        return pushCounter < N ? pushCounter : N;
+    }
+
+    inline int position(int index) const
+    {
+        return (N + ((dataPointer - index) % N)) % N;
+    }
+
+    void push(const T &e)
+    {
+        dataPointer = (dataPointer + 1) % N;
+        data[dataPointer] = e;
+        ++pushCounter;
+    }
+
+    T& get()
+    {
+        dataPointer = (dataPointer + 1) % N;
+        ++pushCounter;
+        return data[dataPointer];
+    }
+
+    void clear()
+    {
+        dataPointer = 0;
+        pushCounter = 0;
+    }
+
+    T& operator[] (int index)
+    {
+        return data[position(index)];
+    }
+
+    const T& operator[] (int index) const
+    {
+        return data[position(index)];
+    }
+};
+
+}
+
+namespace Text {
+
+float textRectangleVertices[] = {
+     1.0f,-1.0f,  1.0f, 1.0f,
+     1.0f, 0.0f,  1.0f, 0.0f,
+     0.0f, 0.0f,  0.0f, 0.0f,
+
+     0.0f,-1.0f,  0.0f, 1.0f,
+     1.0f,-1.0f,  1.0f, 1.0f,
+     0.0f, 0.0f,  0.0f, 0.0f
+};
+
+const int LINE_LENGTH = 128;
+const int LINE_COUNT  = 64;
+const int TEXT_MEMORY_SIZE = 1028 * 32;
+const int DEVICE_MEMORY_OFFSET = 0;
+
+eng::Vec2f consolePosition(-1.0f, 1.0f);
+int lineOffset = 0;
+
+struct ConsoleLine {
+    uint8_t characters[LINE_LENGTH];
+};
+
+eng::WrapStack<ConsoleLine, LINE_COUNT> lineBuffer;
+eng::WrapStack<int, LINE_COUNT> lineLengths;
+
+int newLineCount = 0;
+
+// TODO [console]: string / const char writes
+
+void consoleWrite(const uint8_t *text)
+{
+    int length = eng::ustrlen(text);
+    int fullCount = length / LINE_LENGTH;
+    int leftover = length % LINE_LENGTH;
+
+    ConsoleLine *line;
+    if (leftover > 0) {
+        line = &(lineBuffer.get());
+        memcpy(line->characters, &(text[fullCount * LINE_LENGTH]), leftover);
+        lineLengths.push(leftover);
+        ++newLineCount;
+    }
+    for (int i = fullCount - 1; i >= 0; i--) {
+        line = &(lineBuffer.get());
+        memcpy(line->characters, &(text[i * LINE_LENGTH]), LINE_LENGTH);
+        lineLengths.push(LINE_LENGTH);
+        ++newLineCount;
     }
 }
 
-enum KeySigns {
+void consoleRender()
+{
+    glBindVertexArray(VAO(TEXT));
+    SHD(TEXT).use();
+    
+    // TODO @Performance: Merge glBufferSubData calls into one/two
+
+    if (newLineCount > 0) {
+        glBindBuffer(GL_ARRAY_BUFFER, BUF(TEXT_STRING));
+        int cycles = std::min(LINE_COUNT, newLineCount);
+        for (int i = 0; i < cycles; i++) {
+            int localOffset = LINE_LENGTH * lineLengths.position(i);
+            glBufferSubData(
+                GL_ARRAY_BUFFER,
+                DEVICE_MEMORY_OFFSET + localOffset, 
+                lineLengths[i],
+                lineBuffer[i].characters
+            );
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        newLineCount = 0;
+    }
+
+    glUniform1i(UNI(TEXT_WRAP), LINE_LENGTH);
+    glUniform4f(UNI(TEXT_COLOR), 1.0f, 1.0f, 1.0f, 1.0f);
+
+    // TODO [console]: color; line folding; scrolling
+
+    int lineCount = std::min(32, lineLengths.size());
+    for (int i = 0; i < lineCount; i++) {
+        int wWidth, wHeight;
+        SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
+        eng::Vec2f characterSize(8.f / (float)(wWidth / 2), 16.f / (float)(wHeight / 2));
+        glUniform4f( UNI(TEXT_TRANSFORM),
+            consolePosition[0], consolePosition[1] - characterSize[1] * i,
+            characterSize[0], characterSize[1]
+        );
+        glDrawArraysInstancedBaseInstance( GL_TRIANGLES,
+            0, 6,
+            lineLengths[i + lineOffset],
+            lineLengths.position(i + lineOffset) * LINE_LENGTH
+        );
+    }
+}
+
+
+
+void init()
+{
+    // Vao
+    glGenVertexArrays(1, &VAO(TEXT));
+    glBindVertexArray(VAO(TEXT));
+
+    glGenBuffers(1, &BUF(TEXT_VBO));
+    glBindBuffer(GL_ARRAY_BUFFER, BUF(TEXT_VBO));
+    glBufferData(GL_ARRAY_BUFFER, sizeof(textRectangleVertices), textRectangleVertices, GL_STATIC_DRAW);
+    
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glGenBuffers(1, &BUF(TEXT_STRING));
+    glBindBuffer(GL_ARRAY_BUFFER, BUF(TEXT_STRING));
+    glBufferData(GL_ARRAY_BUFFER, TEXT_MEMORY_SIZE, nullptr, GL_DYNAMIC_DRAW);
+
+    glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(uint8_t), (void*)0);
+    glEnableVertexAttribArray(2);
+
+    glVertexAttribDivisor(2, 1);
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+
+    // Texture
+    int width, height, channelCount;
+    uint8_t *img = stbi_load("../cringe/charsheet.png", &width, &height, &channelCount, STBI_rgb_alpha);
+    if (!img) {
+        std::cerr << "Failed to load image\n";
+        exit(-1);
+    }
+
+    TexParameters parameters = {
+        img,
+        width, height,
+        GL_REPEAT, GL_REPEAT,
+        GL_NEAREST, GL_NEAREST,
+        GL_RGBA, GL_RED, GL_UNSIGNED_BYTE
+    };
+
+    TEX(CHARSHEET).generate(parameters, false);
+
+    free(img);
+
+    TEX(CHARSHEET).bind(1, true);
+
+
+    // Shader
+    SHD(TEXT).generate(
+        GraphicShader::load("shaders/text.vert"),
+        GraphicShader::load("shaders/text.frag")
+    );
+
+    UNI(TEXT_TRANSFORM) = SHD(TEXT).getUniform("u_transform");
+    UNI(TEXT_COLOR) = SHD(TEXT).getUniform("u_textColor");
+    UNI(TEXT_WRAP)  = SHD(TEXT).getUniform("u_wrapLen");
+
+    SHD(TEXT).use();
+    glUniform1i(SHD(TEXT).getUniform("u_charSheet"), 1);
+    GraphicShader::useNone();
+}
+
+void exit()
+{
+    glDeleteBuffers(1, &BUF(TEXT_VBO));
+    glDeleteBuffers(1, &BUF(TEXT_STRING));
+    glDeleteVertexArrays(1, &VAO(TEXT));
+}
+
+}
+
+
+enum KeySigns
+{
     KEY_W,
     KEY_A,
     KEY_S,
@@ -219,7 +471,8 @@ enum KeySigns {
     KEY_COUNT
 };
 
-const uint32_t ScanCodes[] {
+const uint32_t ScanCodes[]
+{
     SDL_SCANCODE_W,
     SDL_SCANCODE_A,
     SDL_SCANCODE_S,
@@ -248,7 +501,8 @@ const uint32_t FULLSCREEN = SDL_WINDOW_FULLSCREEN_DESKTOP;
 
 bool cursorEnabled = false;
 
-void keyCallback(SDL_Event &event, bool down) {
+void keyCallback(SDL_Event &event, bool down)
+{
     SDL_Scancode scancode = event.key.keysym.scancode;
     for (int i = 0; i < KEY_COUNT; i++) {
         if (scancode == ScanCodes[i]) {
@@ -284,7 +538,8 @@ void keyCallback(SDL_Event &event, bool down) {
     }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     const int POINT_COUNT = 32;
     const TexCoordInfo texInfo {
         .0f, .5f, .5f, 1.f,
@@ -296,8 +551,12 @@ int main(int argc, char *argv[]) {
     uint32_t *inds = new uint32_t[nCillinderIC(POINT_COUNT)];
     nCillinder(POINT_COUNT, verts, inds, &texInfo);
 
-    const char *boi = "abcdefghijklmnopqrtsuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    bufferChars(boi, 0, strlen(boi));
+    const char boi[] = "abcdefghijklmnopqrstuvwxyz0123456789%%%";
+    uint8_t reps[] = { 230, 231, 233 };
+    uint8_t dest[sizeof(boi)];
+    eng::strToUStr(boi, dest, reps);
+    Text::consoleWrite(dest);
+    Text::consoleWrite(dest);
 
     Application::init();
     Application::setKeyCallback(keyCallback);
@@ -312,13 +571,11 @@ int main(int argc, char *argv[]) {
 
 // Vao stuff
 
-    uint32_t vao;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
+    glGenVertexArrays(1, &VAO(CLASSIC));
+    glBindVertexArray(VAO(CLASSIC));
 
-    uint32_t vbo;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glGenBuffers(1, &BUF(CLASSIC_VBO));
+    glBindBuffer(GL_ARRAY_BUFFER, BUF(CLASSIC_VBO));
     glBufferData(GL_ARRAY_BUFFER, nCillinderVC(POINT_COUNT, true) * sizeof(float), verts, GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
@@ -330,9 +587,8 @@ int main(int argc, char *argv[]) {
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
-    uint32_t ibo;
-    glGenBuffers(1, &ibo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+    glGenBuffers(1, &BUF(CLASSIC_IBO));
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, BUF(CLASSIC_IBO));
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, nCillinderIC(POINT_COUNT) * sizeof(uint32_t), inds, GL_STATIC_DRAW);
 
     glBindVertexArray(0);
@@ -343,13 +599,11 @@ int main(int argc, char *argv[]) {
     delete[] verts;
 
 
-    uint32_t rectVao;
-    glGenVertexArrays(1, &rectVao);
-    glBindVertexArray(rectVao);
+    glGenVertexArrays(1, &VAO(RECTANGLE));
+    glBindVertexArray(VAO(RECTANGLE));
 
-    uint32_t rectVbo;
-    glGenBuffers(1, &rectVbo);
-    glBindBuffer(GL_ARRAY_BUFFER, rectVbo);
+    glGenBuffers(1, &BUF(RECTANGLE_VBO));
+    glBindBuffer(GL_ARRAY_BUFFER, BUF(RECTANGLE_VBO));
     glBufferData(GL_ARRAY_BUFFER, sizeof(rectangleVertices), rectangleVertices, GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
@@ -361,34 +615,6 @@ int main(int argc, char *argv[]) {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
-
-    uint32_t textVao;
-    glGenVertexArrays(1, &textVao);
-    glBindVertexArray(textVao);
-
-    uint32_t textVbo;
-    glGenBuffers(1, &textVbo);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(rectangleVertices), rectangleVertices, GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    uint32_t stringBuffer;
-    glGenBuffers(1, &stringBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, stringBuffer);
-    glBufferData(GL_ARRAY_BUFFER, STRING_BUFFER_LENGTH, charBuffer, GL_DYNAMIC_DRAW);
-
-    glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(uint8_t), (void*)0);
-    glEnableVertexAttribArray(2);
-
-    glVertexAttribDivisor(2, 1);
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 // Texture stuff
 
@@ -408,65 +634,48 @@ int main(int argc, char *argv[]) {
         GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
     };
 
-    Texture texture(parameters);
+    TEX(CLASSIC).generate(parameters);
 
     free(data);
-
-    int widthC, heightC, channelCountC;
-    uint8_t *img = stbi_load("../cringe/charsheet.png", &widthC, &heightC, &channelCountC, STBI_rgb_alpha);
-    if (!img) {
-        std::cerr << "Failed to load image\n";
-        exit(-1);
-    }
-
-    parameters.minFilter = GL_NEAREST;
-    parameters.data = img;
-    parameters.width = widthC;
-    parameters.height = heightC;
-    parameters.deviceFormat = GL_RED;
-
-    Texture charSheet(parameters, false);
-
-    free(img);
 
 
 // Shader stuff
 
-    GraphicShader shader(
+    SHD(CLASSIC).generate(
         GraphicShader::load("shaders/shader.vert"),
         GraphicShader::load("shaders/shader.frag")
     );
 
-    int mvpMatrix = shader.getUniform("u_mvpMat");
-    int modMatrix = shader.getUniform("u_modMat");
-    int camPos = shader.getUniform("u_cameraPos");
-    int objColor = shader.getUniform("u_objColor");
+    int mvpMatrix = SHD(CLASSIC).getUniform("u_mvpMat");
+    int modMatrix = SHD(CLASSIC).getUniform("u_modMat");
+    int camPos = SHD(CLASSIC).getUniform("u_cameraPos");
+    int objColor = SHD(CLASSIC).getUniform("u_objColor");
 
-    shader.use();
-    glUniform1i(shader.getUniform("textureSampler"), 0);
+    SHD(CLASSIC).use();
+    glUniform1i(SHD(CLASSIC).getUniform("textureSampler"), 0);
 
-    GraphicShader rectShader(
+    SHD(RECTANGLE).generate(
         GraphicShader::load("shaders/rect.vert"),
         GraphicShader::load("shaders/rect.frag")
     );
 
-    int rPosition = rectShader.getUniform("u_position");
-    int rScale = rectShader.getUniform("u_scale");
+    int rPosition = SHD(RECTANGLE).getUniform("u_position");
+    int rScale = SHD(RECTANGLE).getUniform("u_scale");
 
-    rectShader.use();
-    glUniform1i(rectShader.getUniform("u_sampler"), 0);
+    SHD(RECTANGLE).use();
+    glUniform1i(SHD(RECTANGLE).getUniform("u_sampler"), 0);
 
-    GraphicShader textShader(
-        GraphicShader::load("shaders/text.vert"),
-        GraphicShader::load("shaders/text.frag")
+    SHD(RECT_COL).generate(
+        GraphicShader::load("shaders/rectcolor.vert"),
+        GraphicShader::load("shaders/rectcolor.frag")
     );
 
-    int textTrans = textShader.getUniform("u_transform");
-    int textColor = textShader.getUniform("u_textColor");
+    int colPosition = SHD(RECT_COL).getUniform("u_position");
+    int colScale = SHD(RECT_COL).getUniform("u_scale");
+    int colColor = SHD(RECT_COL).getUniform("u_color");
 
-    textShader.use();
-    glUniform1i(textShader.getUniform("u_charSheet"), 1);
-    GraphicShader::useNone();
+
+    Text::init();
 
 // Doo doo
 
@@ -477,6 +686,9 @@ int main(int argc, char *argv[]) {
     eng::Vec2f rPos(-0.5f, 0.5f);
     eng::Vec2f rScl(0.5f, 0.5f);
 
+    eng::Vec2f consolePos(-1.0f, 0.75f);
+    eng::Vec2f consoleScl(1.5f, 1.5f);
+
     auto tp1 = std::chrono::high_resolution_clock::now();
     float deltaTime = 0.0f;
     double timePassed = 0.0;
@@ -484,11 +696,14 @@ int main(int argc, char *argv[]) {
     int wWidth, wHeight;
     SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
 
-    Application::setMouseMotionCallback([&](SDL_Event &event) {
+    Application::setMouseMotionCallback([&](SDL_Event &event)
+    {
         if (cursorEnabled) return;
         cameraRot[0] += (float)(event.motion.yrel) / 256.f;
         cameraRot[1] += (float)(event.motion.xrel) / 256.f;
     });
+
+    TEX(CLASSIC).bind(0, true);
 
     while (Application::running) {
         Application::pollEvents();
@@ -497,7 +712,7 @@ int main(int argc, char *argv[]) {
         float cosVel = cos(cameraRot[1]) * speed;
         float sinVel = sin(cameraRot[1]) * speed;
 
-        if (keyStates[KEY_W]) {
+        if (keyStates[KEY_W]){
             cameraPos[2] -= cosVel;
             cameraPos[0] += sinVel;
         }
@@ -540,7 +755,6 @@ int main(int argc, char *argv[]) {
 
         eng::Mat4f modeMat = eng::Mat4f::translation(rotPos.i, rotPos.j, rotPos.k)
             * eng::Mat4f::rotation(roter.normalize());
-//         eng::Mat4f cringeMat(true);
         eng::Mat4f projMat = eng::Mat4f::GL_Projection(90.f, wWidth, wHeight, 0.1f, 100.f);
         eng::Mat4f viewMat = eng::Mat4f::xRotation(cameraRot[0])
             * eng::Mat4f::yRotation(cameraRot[1])
@@ -551,15 +765,12 @@ int main(int argc, char *argv[]) {
         glClearColor(0.35f, 0.4f, 0.8f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        texture.bind(0, true);
+        glBindVertexArray(VAO(CLASSIC));
 
-        glBindVertexArray(vao);
-
-        shader.use();
+        SHD(CLASSIC).use();
 
         glUniformMatrix4fv(mvpMatrix, 1, false, mvpMat.data);
         glUniformMatrix4fv(modMatrix, 1, false, modeMat.data);
-//         glUniformMatrix4fv(modMatrix, 1, false, cringeMat.data);
         glUniform3fv(camPos, 1, cameraPos.data);
         glUniform3f(objColor, 0.8f, 0.7f, 0.45f);
 
@@ -568,27 +779,29 @@ int main(int argc, char *argv[]) {
 
         glDisable(GL_DEPTH_TEST);
 
-        glBindVertexArray(textVao);
-        textShader.use();
-
-        charSheet.bind(1, true);
-
-        glUniform4f(textTrans,-0.9f,-0.5f, 8.f / 540.f, 16.f / 360.f);
-        glUniform4f(textColor, 1.0f, 1.0f, 1.0f, 1.0f);
-
-        glDrawArraysInstancedBaseInstance(GL_TRIANGLES, 0, 6, strlen(boi), 0);
-
-
-        glBindVertexArray(rectVao);
-        rectShader.use();
-        texture.bind(0, true);
+        glBindVertexArray(VAO(RECTANGLE));
+        SHD(RECTANGLE).use();
 
         glUniform2fv(rPosition, 1, rPos.data);
         glUniform2fv(rScale, 1, rScl.data);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
+
+
+        SHD(RECT_COL).use();
+
+        glUniform2fv(colPosition, 1, consolePos.data);
+        glUniform2fv(colScale, 1, consoleScl.data);
+        glUniform4f(colColor, 0.2f, 0.2f, 0.2f, 0.4f);
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+
         glEnable(GL_DEPTH_TEST);
+
+
+        Text::consoleRender();
 
 
         SDL_GL_SwapWindow(Application::window);
@@ -599,20 +812,22 @@ int main(int argc, char *argv[]) {
         tp1 = tp2;
     }
 
-    shader.free();
-    rectShader.free();
-    textShader.free();
+    for (GraphicShader &shader : shaders) {
+        shader.free();
+    }
 
-    glDeleteBuffers(1, &vbo);
-    glDeleteBuffers(1, &ibo);
-    glDeleteVertexArrays(1, &vao);
+    for (Texture &texture : textures) {
+        texture.free();
+    }
 
-    glDeleteBuffers(1, &rectVbo);
-    glDeleteVertexArrays(1, &rectVao);
+    glDeleteBuffers(1, &BUF(CLASSIC_VBO));
+    glDeleteBuffers(1, &BUF(CLASSIC_IBO));
+    glDeleteVertexArrays(1, &VAO(CLASSIC));
 
-    glDeleteBuffers(1, &textVbo);
-    glDeleteBuffers(1, &stringBuffer);
-    glDeleteVertexArrays(1, &textVao);
+    glDeleteBuffers(1, &BUF(RECTANGLE_VBO));
+    glDeleteVertexArrays(1, &VAO(RECTANGLE));
+
+    Text::exit();
 
     Application::close();
 

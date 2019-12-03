@@ -3,6 +3,10 @@
 #include <glad/glad.h>
 
 Texture::Texture(const TexParameters &parameters, bool mipmap) {
+    generate(parameters, mipmap);
+}
+
+void Texture::generate(const TexParameters &parameters, bool mipmap) {
     glGenTextures(1, &textureId);
     glBindTexture(GL_TEXTURE_2D, textureId);
 
@@ -26,7 +30,6 @@ Texture::Texture(const TexParameters &parameters, bool mipmap) {
     if (mipmap) {
         glGenerateMipmap(GL_TEXTURE_2D);
     }
-
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
