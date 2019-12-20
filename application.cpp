@@ -4,6 +4,8 @@
 
 #include <iostream>
 
+#include "textedit.hpp"
+
 namespace Application {
 
 SDL_Window *window = nullptr;
@@ -13,11 +15,13 @@ bool running = true;
 std::function<void(SDL_Event&, bool)> keyCallback = nullptr;
 std::function<void(SDL_Event&)> mouseMotionCallback = nullptr;
 
-void setKeyCallback(std::function<void(SDL_Event&, bool)> f) {
+void setKeyCallback(std::function<void(SDL_Event&, bool)> f)
+{
     keyCallback = f;
 }
 
-void setMouseMotionCallback(std::function<void(SDL_Event&)> f) {
+void setMouseMotionCallback(std::function<void(SDL_Event&)> f)
+{
     mouseMotionCallback = f;
 }
 
@@ -35,43 +39,82 @@ void GLAPIENTRY openglCallback( GLenum source,
 }
 
 SDL_Event event;
-void pollEvents() {
-    while (SDL_PollEvent(&event)) {
-        switch (event.type) {
+void pollEvents()
+{
+    while (SDL_PollEvent(&event))
+    {
+        switch (event.type)
+        {
             case SDL_QUIT:
+
                 running = false;
+
                 break;
+
             case SDL_WINDOWEVENT:
-                switch (event.window.event) {
+
+                switch (event.window.event)
+                {
                     case SDL_WINDOWEVENT_SIZE_CHANGED:
+
                         glViewport(0, 0, event.window.data1, event.window.data2);
+
                         break;
                 }
+
                 break;
+
             case SDL_KEYDOWN:
-                if (keyCallback != nullptr) {
+
+                if (keyCallback != nullptr)
+                {
                     keyCallback(event, true);
                 }
+
                 break;
+
             case SDL_KEYUP:
-                if (keyCallback != nullptr) {
+
+                if (keyCallback != nullptr)
+                {
                     keyCallback(event, false);
                 }
+
                 break;
+
             case SDL_MOUSEMOTION:
-                if (mouseMotionCallback != nullptr) {
+
+                if (mouseMotionCallback != nullptr)
+                {
                     mouseMotionCallback(event);
                 }
+
+                break;
+
+            case SDL_TEXTINPUT:
+
+//                 std::cout << event.text.text << '\n';
+                TextEdit::write(event.text.text);
+
+                break;
+
+            case SDL_TEXTEDITING:
+
+                std::cout << "Edit" << '\n';
+
                 break;
         }
     }
 }
 
-void init() {
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+void init()
+{
+    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+    {
         std::cerr << "Failed to initialize SDL2\n";
         exit(-1);
     }
+
     SDL_GL_LoadLibrary(NULL);
 
     window = SDL_CreateWindow(
@@ -90,12 +133,15 @@ void init() {
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
     context = SDL_GL_CreateContext(window);
-    if (context == NULL) {
+
+    if (context == NULL)
+    {
         std::cerr << "Failed to initialize context\n";
         exit(-1);
     }
 
-    if (!gladLoadGLLoader(SDL_GL_GetProcAddress)) {
+    if (!gladLoadGLLoader(SDL_GL_GetProcAddress))
+    {
         std::cerr << "Failed to load GLAD\n";
         exit(-1);
     }
@@ -107,7 +153,8 @@ void init() {
     glDebugMessageCallback(openglCallback, 0); 
 }
 
-void close() {
+void close()
+{
     SDL_DestroyWindow(window);
     SDL_Quit();
 }

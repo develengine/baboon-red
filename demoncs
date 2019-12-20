@@ -42,4 +42,5 @@ Xcursor
 ENG_DEBUG
 
 #flags
+-std=c++17
 -Wall

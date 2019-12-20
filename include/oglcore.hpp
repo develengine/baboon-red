@@ -1,5 +1,7 @@
 #pragma once
 
+#include "eng.h"
+
 #include <glad/glad.h>
 #include "shaders.hpp"
 #include "textures.hpp"
@@ -48,16 +50,24 @@ enum UniformIdentifiers
 {
     TEXT_TRANSFORM_UNIFORM,
     TEXT_COLOR_UNIFORM,
+    TEXT_BACKGROUND_UNIFORM,
     TEXT_WRAP_UNIFORM,
+
+    RECTANGLE_POSITION_UNIFORM,
+    RECTANGLE_SCALE_UNIFORM,
+
+    RECT_COL_POSITION_UNIFORM,
+    RECT_COL_SCALE_UNIFORM,
+    RECT_COL_COLOR_UNIFORM,
 
     UNIFORM_COUNT
 };
 
-uint32_t vaos[VAO_COUNT];
-uint32_t buffers[BUFFER_COUNT];
-Texture  textures[TEXTURE_COUNT];
-GraphicShader shaders[SHADER_COUNT];
-int uniforms[UNIFORM_COUNT];
+extern u32 vaos[VAO_COUNT];
+extern u32 buffers[BUFFER_COUNT];
+extern Texture  textures[TEXTURE_COUNT];
+extern GraphicShader shaders[SHADER_COUNT];
+extern int uniforms[UNIFORM_COUNT];
 
 #define VAO(NAME) ( vaos[ NAME ## _VAO ] )
 #define BUF(NAME) ( buffers[ NAME ## _BUFFER ] )
