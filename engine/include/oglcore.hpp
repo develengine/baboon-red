@@ -2,9 +2,7 @@
 
 #include "eng.h"
 
-#include <glad/glad.h>
-#include "shaders.hpp"
-#include "textures.hpp"
+namespace Engine {
 
 enum VaoIdentifiers
 {
@@ -40,13 +38,33 @@ enum TextureIdentifiers
     TEXTURE_COUNT
 };
 
+enum ProgramIdentifiers
+{
+    CLASSIC_PROGRAM,
+    PLAIN_PROGRAM,
+    RECTANGLE_PROGRAM,
+    TEXT_PROGRAM,
+    RECT_COL_PROGRAM,
+
+    PROGRAM_COUNT
+};
+
 enum ShaderIdentifiers
 {
-    CLASSIC_SHADER,
-    PLAIN_SHADER,
-    RECTANGLE_SHADER,
-    TEXT_SHADER,
-    RECT_COL_SHADER,
+    CLASSIC_VERTEX_SHADER,
+    CLASSIC_FRAGMENT_SHADER,
+
+    PLAIN_VERTEX_SHADER,
+    PLAIN_FRAGMENT_SHADER,
+
+    RECTANGLE_VERTEX_SHADER,
+    RECTANGLE_FRAGMENT_SHADER,
+
+    TEXT_VERTEX_SHADER,
+    TEXT_FRAGMENT_SHADER,
+
+    RECT_COL_VERTEX_SHADER,
+    RECT_COL_FRAGMENT_SHADER,
 
     SHADER_COUNT
 };
@@ -70,13 +88,17 @@ enum UniformIdentifiers
 
 extern u32 vaos[VAO_COUNT];
 extern u32 buffers[BUFFER_COUNT];
-extern Texture  textures[TEXTURE_COUNT];
-extern GraphicShader shaders[SHADER_COUNT];
+extern u32 textures[TEXTURE_COUNT];
+extern u32 programs[PROGRAM_COUNT];
+extern u32 shaders[SHADER_COUNT];
 extern int uniforms[UNIFORM_COUNT];
 
-#define VAO(NAME) ( vaos[ NAME ## _VAO ] )
-#define BUF(NAME) ( buffers[ NAME ## _BUFFER ] )
-#define TEX(NAME) ( textures[ NAME ## _TEXTURE ] )
-#define SHD(NAME) ( shaders[ NAME ## _SHADER ] )
-#define UNI(NAME) ( uniforms[ NAME ## _UNIFORM ] )
+}
+
+#define ENG_VAO(NAME) ( Engine::vaos     [ Engine::NAME ## _VAO     ] )
+#define ENG_BUF(NAME) ( Engine::buffers  [ Engine::NAME ## _BUFFER  ] )
+#define ENG_TEX(NAME) ( Engine::textures [ Engine::NAME ## _TEXTURE ] )
+#define ENG_SHD(NAME) ( Engine::shaders  [ Engine::NAME ## _SHADER  ] )
+#define ENG_PRG(NAME) ( Engine::programs [ Engine::NAME ## _PROGRAM ] )
+#define ENG_UNI(NAME) ( Engine::uniforms [ Engine::NAME ## _UNIFORM ] )
 

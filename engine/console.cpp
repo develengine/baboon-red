@@ -1,5 +1,7 @@
 #include "console.hpp"
 
+#include <glad/glad.h>
+
 #include "engutils.hpp"
 #include "oglcore.hpp"
 #include "commander.hpp"
@@ -152,7 +154,7 @@ void render()
 {
     // TODO @Performance: Merge glBufferSubData calls into one/two
 
-    glBindBuffer(GL_ARRAY_BUFFER, BUF(TEXT_STRING));
+    glBindBuffer(GL_ARRAY_BUFFER, ENG_BUF(TEXT_STRING));
     int cycles = std::min(LINE_COUNT, newLineCount);
     int queueSize = lineLengths.size();
 
@@ -182,7 +184,7 @@ void render()
     SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
 
     // Background rendering
-    SHD(RECT_COL).use();
+    glUseProgram(ENG_PRG(RECT_COL));
 
     eng::Vec2f characterSize(8.f / (float)(wWidth / 2), 16.f / (float)(wHeight / 2));
 
@@ -190,19 +192,19 @@ void render()
         characterSize[0] * LINE_LENGTH,
         characterSize[1] * (VISIBLE_LINE_COUNT + 2)
     );
-    glUniform2fv(UNI(RECT_COL_POSITION), 1, consolePosition.data);
-    glUniform2fv(UNI(RECT_COL_SCALE), 1, consoleScl.data);
-    glUniform4f(UNI(RECT_COL_COLOR), 0.2f, 0.2f, 0.2f, 0.4f);
+    glUniform2fv(ENG_UNI(RECT_COL_POSITION), 1, consolePosition.data);
+    glUniform2fv(ENG_UNI(RECT_COL_SCALE), 1, consoleScl.data);
+    glUniform4f(ENG_UNI(RECT_COL_COLOR), 0.2f, 0.2f, 0.2f, 0.4f);
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     // Text rendering
-    glBindVertexArray(VAO(TEXT));
-    SHD(TEXT).use();
+    glBindVertexArray(ENG_VAO(TEXT));
+    glUseProgram(ENG_PRG(TEXT));
     
-    glUniform1i(UNI(TEXT_WRAP), LINE_LENGTH);
-    glUniform4f(UNI(TEXT_COLOR), 1.0f, 1.0f, 1.0f, 1.0f);
-    glUniform4f(UNI(TEXT_BACKGROUND), 0.0f, 0.0f, 0.0f, 0.0f);
+    glUniform1i(ENG_UNI(TEXT_WRAP), LINE_LENGTH);
+    glUniform4f(ENG_UNI(TEXT_COLOR), 1.0f, 1.0f, 1.0f, 1.0f);
+    glUniform4f(ENG_UNI(TEXT_BACKGROUND), 0.0f, 0.0f, 0.0f, 0.0f);
 
     // TODO [console]: color; line folding; scrolling
 
@@ -211,7 +213,7 @@ void render()
     int linePosition = 0;
     for (int i = queueSize - lineCount + lineOffset; i < queueSize; i++)
     {
-        glUniform4f( UNI(TEXT_TRANSFORM),
+        glUniform4f( ENG_UNI(TEXT_TRANSFORM),
             consolePosition[0], consolePosition[1] - characterSize[1] * linePosition,
             characterSize[0], characterSize[1]
         );
@@ -226,7 +228,7 @@ void render()
 
     // Typing line rendering
 
-    glUniform4f( UNI(TEXT_TRANSFORM),
+    glUniform4f( ENG_UNI(TEXT_TRANSFORM),
         consolePosition[0],
         consolePosition[1] - characterSize[1] * VISIBLE_LINE_COUNT - characterSize[1] / 2,
         characterSize[0], characterSize[1]
@@ -237,8 +239,8 @@ void render()
         int cursorPosition = TextEdit::position;
         int lineSize = eng::ustrlen(lineInProgress) + 1;
 
-        glUniform4f(UNI(TEXT_COLOR), 1.0f, 1.0f, 1.0f, 1.0f);
-        glUniform4f(UNI(TEXT_BACKGROUND), 0.0f, 0.0f, 0.0f, 0.0f);
+        glUniform4f(ENG_UNI(TEXT_COLOR), 1.0f, 1.0f, 1.0f, 1.0f);
+        glUniform4f(ENG_UNI(TEXT_BACKGROUND), 0.0f, 0.0f, 0.0f, 0.0f);
 
         glDrawArraysInstancedBaseInstance( GL_TRIANGLES,
             0, 6,
@@ -246,7 +248,7 @@ void render()
             DEVICE_MEMORY_OFFSET + LINE_COUNT * LINE_LENGTH
         );
 
-        glUniform4f( UNI(TEXT_TRANSFORM),
+        glUniform4f( ENG_UNI(TEXT_TRANSFORM),
             consolePosition[0] + characterSize[0] * (cursorPosition + 1),
             consolePosition[1] - characterSize[1] * VISIBLE_LINE_COUNT - characterSize[1] / 2,
             characterSize[0], characterSize[1]
@@ -258,13 +260,13 @@ void render()
             DEVICE_MEMORY_OFFSET + LINE_COUNT * LINE_LENGTH + cursorPosition + 1
         );
 
-        glUniform4f( UNI(TEXT_TRANSFORM),
+        glUniform4f( ENG_UNI(TEXT_TRANSFORM),
             consolePosition[0] + characterSize[0] * cursorPosition,
             consolePosition[1] - characterSize[1] * VISIBLE_LINE_COUNT - characterSize[1] / 2,
             characterSize[0], characterSize[1]
         );
-        glUniform4f(UNI(TEXT_BACKGROUND), 1.0f, 1.0f, 1.0f, 1.0f);
-        glUniform4f(UNI(TEXT_COLOR), 0.0f, 0.0f, 0.0f, 0.0f);
+        glUniform4f(ENG_UNI(TEXT_BACKGROUND), 1.0f, 1.0f, 1.0f, 1.0f);
+        glUniform4f(ENG_UNI(TEXT_COLOR), 0.0f, 0.0f, 0.0f, 0.0f);
 
         glDrawArraysInstancedBaseInstance( GL_TRIANGLES,
             0, 6,
@@ -274,8 +276,8 @@ void render()
     }
     else
     {
-        glUniform4f(UNI(TEXT_COLOR), 1.0f, 1.0f, 1.0f, 1.0f);
-        glUniform4f(UNI(TEXT_BACKGROUND), 0.0f, 0.0f, 0.0f, 0.0f);
+        glUniform4f(ENG_UNI(TEXT_COLOR), 1.0f, 1.0f, 1.0f, 1.0f);
+        glUniform4f(ENG_UNI(TEXT_BACKGROUND), 0.0f, 0.0f, 0.0f, 0.0f);
 
         glDrawArraysInstancedBaseInstance( GL_TRIANGLES,
             0, 6,

@@ -1,6 +1,6 @@
-#include "oglcore.hpp"
+#include "demonoglcore.hpp"
 
-namespace Engine {
+namespace Demon {
 
 u32 vaos[VAO_COUNT];
 u32 buffers[BUFFER_COUNT];

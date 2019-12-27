@@ -1,28 +1,21 @@
 #pragma once
 
+#include "eng.h"
+
 #include <string>
 #include <stdint.h>
 
-struct TexParameters {
-    uint8_t *data;
+namespace Texture {
+
+struct Parameters
+{
+    u8 *data;
     int width, height;
-    uint32_t wrapS, wrapT, minFilter, magFilter;
-    uint32_t localFormat, deviceFormat, formatType;
+    u32 wrapS, wrapT, minFilter, magFilter;
+    u32 localFormat, deviceFormat, formatType;
+    bool mipmap;
 };
 
-class Texture {
+void generate(u32 &texture, const Parameters &parameters);
 
-    uint32_t textureId = 0;
-
-public:
-    Texture(const TexParameters &parameters, bool mipmap = true);
-    Texture() = default;
-
-    void generate(const TexParameters &parameters, bool mipmap = true);
-
-    void bind(uint32_t slot = 0, bool activate = false);
-
-    void free();
-
-    ~Texture();
-};
+}

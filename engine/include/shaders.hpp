@@ -1,30 +1,23 @@
 #pragma once
 
+#include "eng.h"
+
 #include <string>
 
-#include <stdint.h>
 
-class GraphicShader {
-    uint32_t vertexShader = 0;
-    uint32_t fragmentShader = 0;
-    uint32_t programId = 0;
+namespace Shader {
 
-    bool alive = true;
+void generate(
+    u32 &program,
+    u32 &vertexShader,
+    u32 &fragmentShader,
 
-public:
-    GraphicShader(const std::string &vert, const std::string &frag);
-    GraphicShader() = default;
+    const std::string &vert,
+    const std::string &frag
+);
 
-    void generate(const std::string &vert, const std::string &frag);
+std::string load(std::string path);
 
-    uint32_t id();
-    int getUniform(std::string name);
-    void bindUBO(std::string name, uint32_t binding);
-    void use();
+void destroy(u32 program, u32 vertexShader, u32 fragmentShader);
 
-    static void useNone();
-    static std::string load(std::string path);
-
-    void free();
-    ~GraphicShader();
 };

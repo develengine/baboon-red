@@ -24,12 +24,9 @@
 #include <climits>
 
 #include "math.hpp"
-#include "textures.hpp"
-#include "shaders.hpp"
 #include "engutils.hpp"
 #include "textedit.hpp"
 #include "oglcore.hpp"
-#include "demonoglcore.hpp"
 #include "commander.hpp"
 #include "text.hpp"
 #include "ez2d.hpp"
@@ -501,49 +498,43 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    Texture::Parameters parameters
-    {
+    TexParameters parameters = {
         data,
         width, height,
         GL_REPEAT, GL_REPEAT,
         GL_NEAREST_MIPMAP_NEAREST, GL_NEAREST,
-        GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE,
-        true
+        GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
     };
 
-    Texture::generate(TEX(CLASSIC), parameters);
+    TEX(CLASSIC).generate(parameters);
 
     free(data);
 
 
 // Shader stuff
 
-    Shader::generate(
-        PRG(CLASSIC),
-        SHD(CLASSIC_VERTEX), SHD(CLASSIC_FRAGMENT),
-        Shader::load("shaders/shader.vert"),
-        Shader::load("shaders/shader.frag")
+    SHD(CLASSIC).generate(
+        GraphicShader::load("shaders/shader.vert"),
+        GraphicShader::load("shaders/shader.frag")
     );
 
-    int mvpMatrix = glGetUniformLocation(PRG(CLASSIC), "u_mvpMat");
-    int modMatrix = glGetUniformLocation(PRG(CLASSIC), "u_modMat");
-    int camPos    = glGetUniformLocation(PRG(CLASSIC), "u_cameraPos");
-    int objColor  = glGetUniformLocation(PRG(CLASSIC), "u_objColor");
+    int mvpMatrix = SHD(CLASSIC).getUniform("u_mvpMat");
+    int modMatrix = SHD(CLASSIC).getUniform("u_modMat");
+    int camPos = SHD(CLASSIC).getUniform("u_cameraPos");
+    int objColor = SHD(CLASSIC).getUniform("u_objColor");
 
-    glUseProgram(PRG(CLASSIC));
-    glUniform1i(glGetUniformLocation(PRG(CLASSIC), "textureSampler"), 0);
+    SHD(CLASSIC).use();
+    glUniform1i(SHD(CLASSIC).getUniform("textureSampler"), 0);
 
-    Shader::generate(
-        PRG(PLAIN),
-        SHD(PLAIN_VERTEX), SHD(PLAIN_FRAGMENT),
-        Shader::load("shaders/plain.vert"),
-        Shader::load("shaders/plain.frag")
+    SHD(PLAIN).generate(
+        GraphicShader::load("shaders/plain.vert"),
+        GraphicShader::load("shaders/plain.frag")
     );
 
-    int plainMvpMatrix = glGetUniformLocation(PRG(PLAIN), "u_mvpMat");
-    int plainModMatrix = glGetUniformLocation(PRG(PLAIN), "u_modMat");
-    int plainCamPos    = glGetUniformLocation(PRG(PLAIN), "u_cameraPos");
-    int plainObjColor  = glGetUniformLocation(PRG(PLAIN), "u_objColor");
+    int plainMvpMatrix = SHD(PLAIN).getUniform("u_mvpMat");
+    int plainModMatrix = SHD(PLAIN).getUniform("u_modMat");
+    int plainCamPos = SHD(PLAIN).getUniform("u_cameraPos");
+    int plainObjColor = SHD(PLAIN).getUniform("u_objColor");
 
 // Init other stuff
 
@@ -574,8 +565,7 @@ int main(int argc, char *argv[])
         cameraRot[1] += (float)(event.motion.xrel) / 256.f;
     });
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, TEX(CLASSIC));
+    TEX(CLASSIC).bind(0, true);
 
     while (Application::running)
     {
@@ -659,7 +649,7 @@ int main(int argc, char *argv[])
 
         glBindVertexArray(VAO(CLASSIC));
 
-        glUseProgram(PRG(CLASSIC));
+        SHD(CLASSIC).use();
 
         glUniformMatrix4fv(mvpMatrix, 1, false, mvpMat.data);
         glUniformMatrix4fv(modMatrix, 1, false, modeMat.data);
@@ -674,7 +664,7 @@ int main(int argc, char *argv[])
 
         glBindVertexArray(VAO(CUBE));
 
-        glUseProgram(PRG(PLAIN));
+        SHD(PLAIN).use();
 
         glUniformMatrix4fv(plainMvpMatrix, 1, false, mvpMat.data);
         glUniformMatrix4fv(plainModMatrix, 1, false, groundTransform.data);
@@ -686,11 +676,11 @@ int main(int argc, char *argv[])
 
         glDisable(GL_DEPTH_TEST);
 
-        glBindVertexArray(ENG_VAO(RECTANGLE));
-        glUseProgram(ENG_PRG(RECTANGLE));
+        glBindVertexArray(VAO(RECTANGLE));
+        SHD(RECTANGLE).use();
 
-        glUniform2fv(ENG_UNI(RECTANGLE_POSITION), 1, rPos.data);
-        glUniform2fv(ENG_UNI(RECTANGLE_SCALE), 1, rScl.data);
+        glUniform2fv(UNI(RECTANGLE_POSITION), 1, rPos.data);
+        glUniform2fv(UNI(RECTANGLE_SCALE), 1, rScl.data);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -711,10 +701,15 @@ int main(int argc, char *argv[])
         tp1 = tp2;
     }
 
-    Shader::destroy(PRG(CLASSIC), SHD(CLASSIC_VERTEX), SHD(CLASSIC_FRAGMENT));
-    Shader::destroy(PRG(PLAIN), SHD(PLAIN_VERTEX), SHD(PLAIN_FRAGMENT));
+    for (GraphicShader &shader : shaders)
+    {
+        shader.free();
+    }
 
-    glDeleteTextures(1, &TEX(CLASSIC));
+    for (Texture &texture : textures)
+    {
+        texture.free();
+    }
 
     glDeleteBuffers(1, &BUF(CLASSIC_VBO));
     glDeleteBuffers(1, &BUF(CLASSIC_IBO));
