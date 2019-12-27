@@ -361,6 +361,7 @@ namespace eng {
             output[0][0] = x;
             output[1][1] = y;
             output[2][2] = z;
+            output[3][3] = 1;
             return output;
         }
 
@@ -368,6 +369,7 @@ namespace eng {
             Matrix4x4 output = Matrix4x4(false);
             for (int i = 0; i < 3; i++)
                 output[i][i] = v[i];
+            output[3][3] = 1;
             return output;
         }
 

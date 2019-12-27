@@ -1,3 +1,13 @@
+/* Other TODO:
+ - Directional shadows
+ - Point lights
+ - Point shadows
+ - Animation
+ - Sound
+ - Collisions
+ - Sky boxes
+*/
+
 #include "eng.h"
 
 #include "application.hpp"
@@ -399,8 +409,10 @@ int main(int argc, char *argv[])
         4.f
     };
 
-    float *verts = new float[nCillinderVC(POINT_COUNT, true)];
-    u32 *inds = new u32[nCillinderIC(POINT_COUNT)];
+    std::cout << sizeof(cubeIndices) / sizeof(u32) << '\n';
+
+    float verts[nCillinderVC(POINT_COUNT, true)];
+    u32 inds[nCillinderIC(POINT_COUNT)];
     nCillinder(POINT_COUNT, verts, inds, &texInfo);
 
     Commander::addCommand("kek", [] (int c, char *v[])
@@ -452,9 +464,27 @@ int main(int argc, char *argv[])
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    delete[] inds;
-    delete[] verts;
 
+    glGenVertexArrays(1, &VAO(CUBE));
+    glBindVertexArray(VAO(CUBE));
+
+    glGenBuffers(1, &BUF(CUBE_VBO));
+    glBindBuffer(GL_ARRAY_BUFFER, BUF(CUBE_VBO));
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glGenBuffers(1, &BUF(CUBE_IBO));
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, BUF(CUBE_IBO));
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndices), cubeIndices, GL_STATIC_DRAW);
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
 // Texture stuff
 
@@ -495,6 +525,16 @@ int main(int argc, char *argv[])
 
     SHD(CLASSIC).use();
     glUniform1i(SHD(CLASSIC).getUniform("textureSampler"), 0);
+
+    SHD(PLAIN).generate(
+        GraphicShader::load("shaders/plain.vert"),
+        GraphicShader::load("shaders/plain.frag")
+    );
+
+    int plainMvpMatrix = SHD(PLAIN).getUniform("u_mvpMat");
+    int plainModMatrix = SHD(PLAIN).getUniform("u_modMat");
+    int plainCamPos = SHD(PLAIN).getUniform("u_cameraPos");
+    int plainObjColor = SHD(PLAIN).getUniform("u_objColor");
 
 // Init other stuff
 
@@ -617,6 +657,21 @@ int main(int argc, char *argv[])
         glUniform3f(objColor, 0.8f, 0.7f, 0.45f);
 
         glDrawElements(GL_TRIANGLES, nCillinderIC(POINT_COUNT), GL_UNSIGNED_INT, (void*)(0));
+
+
+        eng::Mat4f groundTransform = eng::Mat4f::translation(0.0f, -8.0f, 0.0f)
+                                   * eng::Mat4f::scale(20.0f, 1.0f, 20.0f);
+
+        glBindVertexArray(VAO(CUBE));
+
+        SHD(PLAIN).use();
+
+        glUniformMatrix4fv(plainMvpMatrix, 1, false, mvpMat.data);
+        glUniformMatrix4fv(plainModMatrix, 1, false, groundTransform.data);
+        glUniform3fv(plainCamPos, 1, cameraPos.data);
+        glUniform3f(plainObjColor, 0.8f, 0.7f, 0.45f);
+
+        glDrawElements(GL_TRIANGLES, sizeof(cubeIndices) / sizeof(u32), GL_UNSIGNED_INT, (void*)(0));
 
 
         glDisable(GL_DEPTH_TEST);

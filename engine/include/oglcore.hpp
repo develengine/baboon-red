@@ -10,6 +10,7 @@ enum VaoIdentifiers
 {
     CLASSIC_VAO,
     RECTANGLE_VAO,
+    CUBE_VAO,
     TEXT_VAO,
 
     VAO_COUNT
@@ -19,6 +20,9 @@ enum BufferIdentifiers
 {
     CLASSIC_VBO_BUFFER,
     CLASSIC_IBO_BUFFER,
+
+    CUBE_VBO_BUFFER,
+    CUBE_IBO_BUFFER,
 
     RECTANGLE_VBO_BUFFER,
 
@@ -39,6 +43,7 @@ enum TextureIdentifiers
 enum ShaderIdentifiers
 {
     CLASSIC_SHADER,
+    PLAIN_SHADER,
     RECTANGLE_SHADER,
     TEXT_SHADER,
     RECT_COL_SHADER,

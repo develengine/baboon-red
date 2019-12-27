@@ -2,7 +2,7 @@
 clang++
 
 #program_name
-prog.exe
+demon/prog.exe
 
 #src_file_extensions
 .cpp
@@ -13,15 +13,17 @@ hpp
 h
 
 #object_directory
-obj
+demon/obj
 
 #source_directories
-.
+engine
+demon
 ../libs/glad/src
 ../libs/stb_image
 
 #include_directories
-include
+engine/include
+demon/include
 ../libs/glad/include
 ../libs/stb_image
 

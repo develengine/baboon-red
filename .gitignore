@@ -1,5 +1,5 @@
 *.swp
-prog.exe
-obj
+*/prog.exe
+*/obj
 *.modinfo.json
 tags
