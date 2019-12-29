@@ -9,7 +9,8 @@ layout(location = 0) out vec2 o_texCoords;
 uniform int u_wrapLen;
 uniform vec4 u_transform;
 
-void main() {
+void main()
+{
     uint character = (i_data << 24) >> 24;
 
     vec2 texOffset = vec2(i_texCoords.x / 32.0, i_texCoords.y / 8.0);

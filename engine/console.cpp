@@ -184,6 +184,7 @@ void render()
     SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
 
     // Background rendering
+    glBindVertexArray(ENG_VAO(RECTANGLE));
     glUseProgram(ENG_PRG(RECT_COL));
 
     eng::Vec2f characterSize(8.f / (float)(wWidth / 2), 16.f / (float)(wHeight / 2));

@@ -14,6 +14,7 @@ bool running = true;
 
 std::function<void(SDL_Event&, bool)> keyCallback = nullptr;
 std::function<void(SDL_Event&)> mouseMotionCallback = nullptr;
+std::function<void(SDL_Event&, bool)> mouseButtonCallback = nullptr;
 
 void setKeyCallback(std::function<void(SDL_Event&, bool)> f)
 {
@@ -23,6 +24,11 @@ void setKeyCallback(std::function<void(SDL_Event&, bool)> f)
 void setMouseMotionCallback(std::function<void(SDL_Event&)> f)
 {
     mouseMotionCallback = f;
+}
+
+void setMouseButtonCallback(std::function<void(SDL_Event&, bool)> f)
+{
+    mouseButtonCallback = f;
 }
 
 void GLAPIENTRY openglCallback( GLenum source,
@@ -101,6 +107,24 @@ void pollEvents()
             case SDL_TEXTEDITING:
 
                 std::cout << "Edit" << '\n';
+
+                break;
+
+            case SDL_MOUSEBUTTONDOWN:
+
+                if (mouseButtonCallback != nullptr)
+                {
+                    mouseButtonCallback(event, true);
+                }
+
+                break;
+
+            case SDL_MOUSEBUTTONUP:
+
+                if (mouseButtonCallback != nullptr)
+                {
+                    mouseButtonCallback(event, false);
+                }
 
                 break;
         }

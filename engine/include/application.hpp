@@ -12,6 +12,7 @@ extern bool running;
 void init();
 void setKeyCallback(std::function<void(SDL_Event&, bool)> f);
 void setMouseMotionCallback(std::function<void(SDL_Event&)> f);
+void setMouseButtonCallback(std::function<void(SDL_Event&, bool)> f);
 void pollEvents();
 void close();
 

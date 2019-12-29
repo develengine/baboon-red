@@ -138,10 +138,10 @@ namespace eng {
             return output;
         }
 
-        inline T operator*(const Vector &b) const {
-            T output = 0;
+        inline Vector operator*(const Vector &b) const {
+            Vector output = Vector();
             for (int i = 0; i < D; i++)
-                output += (*this)[i] * b[i];
+                output[i] = (*this)[i] * b[i];
             return output;
         }
 
