@@ -8,6 +8,7 @@
 
 namespace Application {
 
+u32 initFlags = SDL_INIT_VIDEO;
 SDL_Window *window = nullptr;
 SDL_GLContext context;
 bool running = true;
@@ -15,6 +16,11 @@ bool running = true;
 std::function<void(SDL_Event&, bool)> keyCallback = nullptr;
 std::function<void(SDL_Event&)> mouseMotionCallback = nullptr;
 std::function<void(SDL_Event&, bool)> mouseButtonCallback = nullptr;
+
+void setInitFlag(u32 flag)
+{
+    initFlags |= flag;
+}
 
 void setKeyCallback(std::function<void(SDL_Event&, bool)> f)
 {
@@ -133,7 +139,7 @@ void pollEvents()
 
 void init()
 {
-    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+    if (SDL_Init(initFlags) < 0)
     {
         std::cerr << "Failed to initialize SDL2\n";
         exit(-1);

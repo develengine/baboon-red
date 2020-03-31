@@ -2,7 +2,7 @@
 clang++
 
 #program_name
-gamen/prog.exe
+jammer/prog.exe
 
 #src_file_extensions
 .cpp
@@ -13,17 +13,17 @@ hpp
 h
 
 #object_directory
-gamen/obj
+jammer/obj
 
 #source_directories
 engine
-gamen
+jammer
 ../libs/glad/src
 ../libs/stb_image
 
 #include_directories
 engine/include
-gamen/include
+jammer/include
 ../libs/glad/include
 ../libs/stb_image
 
@@ -44,7 +44,5 @@ Xcursor
 ENG_DEBUG
 
 #flags
--O3
 -std=c++17
 -Wall
--Winline

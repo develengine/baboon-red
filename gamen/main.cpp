@@ -1,13 +1,3 @@
-/* Other TODO:
- - Directional shadows
- - Point lights
- - Point shadows
- - Animation
- - Sound
- - Collisions
- - Sky boxes
-*/
-
 #include "eng.h"
 
 #include "application.hpp"
@@ -33,8 +23,15 @@
 #include "text.hpp"
 #include "ez2d.hpp"
 #include "console.hpp"
+#include "input.hpp"
 
 #include "gamenoglcore.hpp"
+
+float lines[]
+{
+     0.0f, 0.0f, 1.0f, 1.0f,
+    -1.0f, 0.5f, 0.0f, 0.5f
+};
 
 float rectangleVertices[]
 {
@@ -50,181 +47,156 @@ u32 rectangleIndices[]
     2, 1, 3
 };
 
-enum KeySigns
+float boxColliderLines[]
 {
-    KEY_W,
-    KEY_A,
-    KEY_S,
-    KEY_D,
-    KEY_SPACE,
-    KEY_SHIFT,
-    KEY_UP,
-    KEY_DOWN,
-    KEY_LEFT,
-    KEY_RIGHT,
-    KEY_K,
-    KEY_J,
-    KEY_H,
-    KEY_L,
-    KEY_COUNT
+    0.0f, 0.0f,  1.0f, 0.0f,
+    1.0f, 0.0f,  1.0f, 1.0f,
+    1.0f, 1.0f,  0.0f, 1.0f,
+    0.0f, 1.0f,  0.0f, 0.0f
 };
 
-const u32 ScanCodes[]
-{
-    SDL_SCANCODE_W,
-    SDL_SCANCODE_A,
-    SDL_SCANCODE_S,
-    SDL_SCANCODE_D,
-    SDL_SCANCODE_SPACE,
-    SDL_SCANCODE_LSHIFT,
-    SDL_SCANCODE_UP,
-    SDL_SCANCODE_DOWN,
-    SDL_SCANCODE_LEFT,
-    SDL_SCANCODE_RIGHT,
-    SDL_SCANCODE_K,
-    SDL_SCANCODE_J,
-    SDL_SCANCODE_H,
-    SDL_SCANCODE_L,
-    SDL_SCANCODE_LSHIFT
-};
+inline float collisionLineOnLine(
+    float oax, float oay, float obx, float oby,
+    float cax, float cay, float cbx, float cby,
+    float vxn, float vyn, float d
+) {
+    // oax and oay are 0
+    float obxTranslated = obx - oax;
+    float obyTranslated = oby - oay;
+    float caxTranslated = cax - oax;
+    float cayTranslated = cay - oay;
+    float cbxTranslated = cbx - oax;
+    float cbyTranslated = cby - oay;
 
-bool keyStates[KEY_COUNT];
+    // oax and oay still 0
+    float obxRotated = obxTranslated * vxn + obyTranslated * vyn;
+    float obyRotated = obyTranslated * vxn - obxTranslated * vyn;
+    float caxRotated = caxTranslated * vxn + cayTranslated * vyn;
+    float cayRotated = cayTranslated * vxn - caxTranslated * vyn;
+    float cbxRotated = cbxTranslated * vxn + cbyTranslated * vyn;
+    float cbyRotated = cbyTranslated * vxn - cbxTranslated * vyn;
 
-#define KEY(x) ( keyStates[ KEY_ ## x ] )
+    #define CLOL_RETURN    \
+        if (d1 < d2)       \
+        {                  \
+            if (d < d1)    \
+            {              \
+                return d;  \
+            }              \
+            else           \
+            {              \
+                return d1; \
+            }              \
+        }                  \
+        else               \
+        {                  \
+            if (d < d2)    \
+            {              \
+                return d;  \
+            }              \
+            else           \
+            {              \
+                return d2; \
+            }              \
+        }
 
-u32 windowType = 0;
-#ifdef _WIN32
-const u32 FULLSCREEN = SDL_WINDOW_FULLSCREEN;
-#else
-const u32 FULLSCREEN = SDL_WINDOW_FULLSCREEN_DESKTOP;
-#endif
-
-bool cursorEnabled = false;
-
-void keyCallback(SDL_Event &event, bool down)
-{
-    SDL_Scancode scancode = event.key.keysym.scancode;
-
-    if (!Console::active)
+    if (obyRotated > 0)
     {
-        for (int i = 0; i < KEY_COUNT; i++)
+        if (cayRotated > obyRotated)
         {
-            if (scancode == ScanCodes[i])
+            if (cbyRotated > obyRotated)
             {
-                keyStates[i] = down;
-                break;
+                return d;
+            }
+            else if (cbyRotated > 0)
+            {
+                // ob, cb
+                float d1 = caxRotated + ((cbxRotated - caxRotated) / (cayRotated - cbyRotated)) * (cayRotated - obyRotated) - obxRotated;
+                float d2 = cbxRotated - (obxRotated / obyRotated) * cbyRotated;
+
+                CLOL_RETURN
+            }
+            else
+            {
+                // oa, ob
+                float ratio = (cbxRotated - caxRotated) / (cayRotated - cbyRotated);
+                float d1 = caxRotated + (caxRotated - obxRotated) * ratio - obxRotated;
+                float d2 = caxRotated + cay * ratio;
+
+                CLOL_RETURN
+            }
+        }
+        else if (cayRotated > 0)
+        {
+            if (cbyRotated > cayRotated)
+            {
+                return d;
+            }
+            else if (cbyRotated > 0)
+            {
+                // ca, cb
+                float ratio = obxRotated / obyRotated;
+                float d1 = caxRotated - cayRotated * ratio;
+                float d2 = cbxRotated - cbyRotated * ratio;
+
+                CLOL_RETURN
+            }
+            else
+            {
+                // oa, ca
+                float d1 = caxRotated - (obxRotated / obyRotated) * cayRotated;
+                float d2 = caxRotated + ((cbxRotated - caxRotated) / (cayRotated - cbyRotated)) * cayRotated;
+
+                CLOL_RETURN
             }
         }
     }
+//     else
+//     {
+//         if (cayRotated < obyRotated)
+//         {
+//             if (cbyRotated < obyRotated)
+//             {
+//                 return d;
+//             }
+//             else if (cbyRotated < 0)
+//             {
+//                 // ob, cb
+//             }
+//             else
+//             {
+//                 // oa, ob
+//             }
+//         }
+//         else if (cayRotated < 0)
+//         {
+//             if (cbyRotated < cayRotated)
+//             {
+//                 return d;
+//             }
+//             else if (cbyRotated < 0)
+//             {
+//                 // ca, cb
+//             }
+//             else
+//             {
+//                 // oa, ca
+//             }
+//         }
+//     }
 
-    if (!down) return;
-
-    switch (scancode)
-    {
-        // For debug mostly
-        case SDL_SCANCODE_F9:
-
-            Console::write("Debug line!");
-
-            break;
-
-        case SDL_SCANCODE_F11:
-
-            if (windowType == 0)
-            {
-                windowType = FULLSCREEN;
-            }
-            else
-            {
-                windowType = 0;
-            }
-
-            if (SDL_SetWindowFullscreen(Application::window, windowType) != 0)
-            {
-                std::cerr << "Failed to change window! Error: " << SDL_GetError() << '\n';
-            }
-
-            break;
-
-        case SDL_SCANCODE_LALT:
-
-            SDL_ShowCursor(cursorEnabled ? SDL_FALSE : SDL_TRUE);
-            SDL_SetRelativeMouseMode(cursorEnabled ? SDL_TRUE : SDL_FALSE);
-            cursorEnabled = !cursorEnabled;
-
-            break;
-
-        case SDL_SCANCODE_ESCAPE:
-
-            Application::running = false;
-
-            break;
-
-        case SDL_SCANCODE_RALT:
-
-            Console::active = !Console::active;
-
-            if (Console::active)
-            {
-                TextEdit::setTarget(
-                    Console::lineInProgress,
-                    CONSOLE_INPUT_LINE_SIZE,
-                    &Console::inputCallback
-                );
-                Console::inputActive = true;
-            }
-            else
-            {
-                TextEdit::terminate();
-            }
-
-            break;
-
-        case SDL_SCANCODE_RETURN:
-
-            TextEdit::enter();
-
-            break;
-
-        case SDL_SCANCODE_BACKSPACE:
-
-            TextEdit::deleteLeft();
-
-            break;
-
-        case SDL_SCANCODE_DELETE:
-
-            TextEdit::deleteRight();
-
-            break;
-
-        case SDL_SCANCODE_LEFT:
-
-            TextEdit::moveLeft();
-
-            break;
-
-        case SDL_SCANCODE_RIGHT:
-
-            TextEdit::moveRight();
-
-            break;
-
-        case SDL_SCANCODE_HOME:
-
-            TextEdit::moveStart();
-
-            break;
-
-        case SDL_SCANCODE_END:
-
-            TextEdit::moveEnd();
-
-            break;
-
-        default : return;
-    }
+    return d;
 }
+
+
+float clipMovement(
+    float vx, float vy,
+    float ox, float oy,
+    float sx, float sy
+) {
+    return 0.0f;
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -246,7 +218,7 @@ int main(int argc, char *argv[])
     });
 
     Application::init();
-    Application::setKeyCallback(&keyCallback);
+    Application::setKeyCallback(&Input::keyCallback);
 
     SDL_StartTextInput();
 //     SDL_StopTextInput();
@@ -280,6 +252,7 @@ int main(int argc, char *argv[])
 
     glBindVertexArray(0);
 
+
     glGenVertexArrays(1, &VAO(CHUNKY));
     glBindVertexArray(VAO(CHUNKY));
 
@@ -308,6 +281,18 @@ int main(int argc, char *argv[])
 
     glBindVertexArray(0);
 
+
+    glGenVertexArrays(1, &VAO(LINE));
+    glBindVertexArray(VAO(LINE));
+
+    glGenBuffers(1, &BUF(LINE_VBO));
+    glBindBuffer(GL_ARRAY_BUFFER, BUF(LINE_VBO));
+    glBufferData(GL_ARRAY_BUFFER, sizeof(lines), lines, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindVertexArray(0);
 
 // Texture stuff
 
@@ -423,6 +408,7 @@ int main(int argc, char *argv[])
     glUniform2f(UNI(GAMEN_TEX_SPAN), singleTileSpan, singleTileSpan);
 
     glDisable(GL_DEPTH_TEST);
+    glLineWidth(4.0f);
 
     while (Application::running)
     {
@@ -432,22 +418,22 @@ int main(int argc, char *argv[])
 
         if (KEY(LEFT))
         {
-            rPos[0] -= speed;
+            rPos[0] -= speed * 0.5;
         }
 
         if (KEY(RIGHT))
         {
-            rPos[0] += speed;
+            rPos[0] += speed * 0.5;
         }
 
         if (KEY(UP))
         {
-            rPos[1] += speed;
+            rPos[1] += speed * 0.5;
         }
 
         if (KEY(DOWN))
         {
-            rPos[1] -= speed;
+            rPos[1] -= speed * 0.5;
         }
 
         if (KEY(A))
@@ -485,11 +471,9 @@ int main(int argc, char *argv[])
         float widthRatio = (float)wHeight / (float)wWidth;
         eng::Vec2f baseScale(widthRatio * cameraZoom, cameraZoom);
 
-        eng::Vec2f newRectPos = (rPos - cameraPosition) * baseScale;
-        eng::Vec2f newRectScale = rScl * baseScale;
-
         glClearColor(0.35f, 0.4f, 0.8f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
 
         eng::Vec2f chunkPosition(0.0f, 0.0f);
         eng::Vec2f chunkRelativePosition = (chunkPosition - cameraPosition) * baseScale;
@@ -513,14 +497,49 @@ int main(int argc, char *argv[])
         glDrawElementsInstanced(GL_TRIANGLES, sizeof(rectangleIndices) / sizeof(u32), GL_UNSIGNED_INT, (void*)(0), 32 * 32);
 
 
+        eng::Vec2f newRectPos = (rPos - cameraPosition) * baseScale;
+        eng::Vec2f newRectScale = rScl * baseScale;
+        eng::Vec2f torsoPos = newRectPos + eng::Vec2f(0.0f, baseScale[1] * 0.5f);
+
         glBindVertexArray(VAO(CLASSIC));
         glUseProgram(PRG(GAMEN));
 
-        glUniform2fv(UNI(GAMEN_POSITION), 1, newRectPos.data);
         glUniform2fv(UNI(GAMEN_SCALE), 1, newRectScale.data);
-        glUniform2f(UNI(GAMEN_TEX_OFFSET), singleTileSpan * 0, singleTileSpan * 2);
 
+        glUniform2fv(UNI(GAMEN_POSITION), 1, torsoPos.data);
+        glUniform2f(UNI(GAMEN_TEX_OFFSET), singleTileSpan * 3, singleTileSpan * 6);
         glDrawElements(GL_TRIANGLES, sizeof(rectangleIndices) / sizeof(u32), GL_UNSIGNED_INT, (void*)(0));
+
+        glUniform2fv(UNI(GAMEN_POSITION), 1, newRectPos.data);
+        glUniform2f(UNI(GAMEN_TEX_OFFSET), singleTileSpan * 3, singleTileSpan * 7);
+        glDrawElements(GL_TRIANGLES, sizeof(rectangleIndices) / sizeof(u32), GL_UNSIGNED_INT, (void*)(0));
+
+
+        eng::Vec2f linesPosition(0.0f, 0.0f);
+        eng::Vec2f linesRelativePosition = (linesPosition - cameraPosition) * baseScale;
+        eng::Vec2f linesScale(1.0f, 1.0f);
+        eng::Vec2f linesRelativeScale = linesScale * baseScale;
+
+        glBindVertexArray(VAO(LINE));
+        glUseProgram(ENG_PRG(RECT_COL));
+
+        glUniform2fv(ENG_UNI(RECT_COL_POSITION), 1, linesRelativePosition.data);
+        glUniform2fv(ENG_UNI(RECT_COL_SCALE), 1, linesRelativeScale.data);
+        glUniform4f(ENG_UNI(RECT_COL_COLOR), 9.0f, 0.1f, 0.2f, 1.0f);
+
+        glDrawArrays(GL_LINES, 0, sizeof(lines) / sizeof(float));
+
+
+        eng::Vec2f pointB(cos(timePassed), sin(timePassed));
+
+        glBindVertexArray(ENG_VAO(DUMMY));
+        glUseProgram(ENG_PRG(LINE));
+
+        glUniform2f(ENG_UNI(LINE_VERT0), 0.0f, 0.0f);
+        glUniform2fv(ENG_UNI(LINE_VERT1), 1, pointB.data);
+        glUniform4f(ENG_UNI(LINE_COLOR), 0.1f, 0.9f, 0.2f, 1.0f);
+
+        glDrawArrays(GL_LINES, 0, 2);
 
 
         if (Console::active)

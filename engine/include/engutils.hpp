@@ -1,7 +1,9 @@
 #pragma once
 
 #include "eng.h"
+
 #include <iostream>
+#include <cstring>
 
 
 namespace eng {
@@ -123,5 +125,11 @@ public:
         return data[position(index)];
     }
 };
+
+inline void swapBytes(u8 *b)
+{
+    u8 buffer[] = { b[3], b[2], b[1], b[0] };
+    memcpy(b, buffer, 4);
+}
 
 }

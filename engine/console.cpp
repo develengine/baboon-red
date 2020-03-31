@@ -195,7 +195,7 @@ void render()
     );
     glUniform2fv(ENG_UNI(RECT_COL_POSITION), 1, consolePosition.data);
     glUniform2fv(ENG_UNI(RECT_COL_SCALE), 1, consoleScl.data);
-    glUniform4f(ENG_UNI(RECT_COL_COLOR), 0.2f, 0.2f, 0.2f, 0.4f);
+    glUniform4f(ENG_UNI(RECT_COL_COLOR), 0.05f, 0.05f, 0.05f, 0.6f);
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
 

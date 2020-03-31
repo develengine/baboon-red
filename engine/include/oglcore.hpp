@@ -10,6 +10,7 @@ enum VaoIdentifiers
     RECTANGLE_VAO,
     CUBE_VAO,
     TEXT_VAO,
+    DUMMY_VAO,
 
     VAO_COUNT
 };
@@ -45,6 +46,7 @@ enum ProgramIdentifiers
     RECTANGLE_PROGRAM,
     TEXT_PROGRAM,
     RECT_COL_PROGRAM,
+    LINE_PROGRAM,
 
     PROGRAM_COUNT
 };
@@ -66,6 +68,9 @@ enum ShaderIdentifiers
     RECT_COL_VERTEX_SHADER,
     RECT_COL_FRAGMENT_SHADER,
 
+    LINE_VERTEX_SHADER,
+    LINE_FRAGMENT_SHADER,
+
     SHADER_COUNT
 };
 
@@ -82,6 +87,10 @@ enum UniformIdentifiers
     RECT_COL_POSITION_UNIFORM,
     RECT_COL_SCALE_UNIFORM,
     RECT_COL_COLOR_UNIFORM,
+
+    LINE_VERT0_UNIFORM,
+    LINE_VERT1_UNIFORM,
+    LINE_COLOR_UNIFORM,
 
     UNIFORM_COUNT
 };

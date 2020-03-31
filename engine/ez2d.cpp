@@ -38,6 +38,8 @@ void init()
     glBindVertexArray(0);
 
 
+    glGenVertexArrays(1, &ENG_VAO(DUMMY));
+
     // Shader loading
     Shader::generate(
         ENG_PRG(RECTANGLE),
@@ -63,6 +65,17 @@ void init()
     ENG_UNI(RECT_COL_POSITION) = glGetUniformLocation(ENG_PRG(RECT_COL), "u_position");
     ENG_UNI(RECT_COL_SCALE)    = glGetUniformLocation(ENG_PRG(RECT_COL), "u_scale");
     ENG_UNI(RECT_COL_COLOR)    = glGetUniformLocation(ENG_PRG(RECT_COL), "u_color");
+
+    Shader::generate(
+        ENG_PRG(LINE),
+        ENG_SHD(LINE_VERTEX), ENG_SHD(LINE_FRAGMENT),
+        Shader::load("shaders/lines.vert"),
+        Shader::load("shaders/lines.frag")
+    );
+
+    ENG_UNI(LINE_VERT0) = glGetUniformLocation(ENG_PRG(LINE), "u_points[0]");
+    ENG_UNI(LINE_VERT1) = glGetUniformLocation(ENG_PRG(LINE), "u_points[1]");
+    ENG_UNI(LINE_COLOR) = glGetUniformLocation(ENG_PRG(LINE), "u_color");
 }
 
 void close()

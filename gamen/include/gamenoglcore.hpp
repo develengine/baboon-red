@@ -8,6 +8,7 @@ enum VaoIdentifiers
 {
     CLASSIC_VAO,
     CHUNKY_VAO,
+    LINE_VAO,
 
     VAO_COUNT
 };
@@ -20,6 +21,8 @@ enum BufferIdentifiers
     CHUNKY_VBO_BUFFER,
     CHUNKY_IBO_BUFFER,
     CHUNKY_DATA_BUFFER,
+
+    LINE_VBO_BUFFER,
 
     BUFFER_COUNT
 };
@@ -35,6 +38,7 @@ enum ProgramIdentifiers
 {
     GAMEN_PROGRAM,
     CHUNKY_PROGRAM,
+    LINE_PROGRAM,
 
     PROGRAM_COUNT
 };
@@ -46,6 +50,9 @@ enum ShaderIdentifiers
 
     CHUNKY_VERTEX_SHADER,
     CHUNKY_FRAGMENT_SHADER,
+
+    LINE_VERTEX_SHADER,
+    LINE_FRAGMENT_SHADER,
 
     SHADER_COUNT
 };
@@ -59,6 +66,10 @@ enum UniformIdentifiers
 
     CHUNKY_POSITION_UNIFORM,
     CHUNKY_SCALE_UNIFORM,
+
+    LINE_POSITION,
+    LINE_SCALE,
+    LINE_COLOR,
 
     UNIFORM_COUNT
 };
