@@ -9,6 +9,7 @@
 #include <iostream>
 #include <string>
 #include <chrono>
+#include <vector>
 
 #include <cmath>
 #include <climits>
@@ -35,14 +36,6 @@ enum KeySigns
     KEY_D,
     KEY_SPACE,
     KEY_SHIFT,
-    KEY_UP,
-    KEY_DOWN,
-    KEY_LEFT,
-    KEY_RIGHT,
-    KEY_K,
-    KEY_J,
-    KEY_H,
-    KEY_L,
 
     KEY_COUNT
 };
@@ -54,15 +47,6 @@ const u32 ScanCodes[]
     SDL_SCANCODE_S,
     SDL_SCANCODE_D,
     SDL_SCANCODE_SPACE,
-    SDL_SCANCODE_LSHIFT,
-    SDL_SCANCODE_UP,
-    SDL_SCANCODE_DOWN,
-    SDL_SCANCODE_LEFT,
-    SDL_SCANCODE_RIGHT,
-    SDL_SCANCODE_K,
-    SDL_SCANCODE_J,
-    SDL_SCANCODE_H,
-    SDL_SCANCODE_L,
     SDL_SCANCODE_LSHIFT
 };
 
@@ -78,6 +62,18 @@ const u32 FULLSCREEN = SDL_WINDOW_FULLSCREEN_DESKTOP;
 #endif
 
 bool cursorEnabled = false;
+
+enum Instruction
+{
+    INS_HOP,
+    INS_LEAP,
+    INS_TURN_LEFT,
+    INS_TURN_RIGHT,
+
+    INS_NONE
+};
+
+void administerInput(Instruction instruction);
 
 void keyCallback(SDL_Event &event, bool down)
 {
@@ -101,9 +97,7 @@ void keyCallback(SDL_Event &event, bool down)
     {
         // For debug mostly
         case SDL_SCANCODE_F9:
-
             Console::write("Debug line!");
-
             break;
 
         case SDL_SCANCODE_F11:
@@ -125,17 +119,13 @@ void keyCallback(SDL_Event &event, bool down)
             break;
 
         case SDL_SCANCODE_LALT:
-
             SDL_ShowCursor(cursorEnabled ? SDL_FALSE : SDL_TRUE);
             SDL_SetRelativeMouseMode(cursorEnabled ? SDL_TRUE : SDL_FALSE);
             cursorEnabled = !cursorEnabled;
-
             break;
 
         case SDL_SCANCODE_ESCAPE:
-
             Application::running = false;
-
             break;
 
         case SDL_SCANCODE_RALT:
@@ -159,15 +149,11 @@ void keyCallback(SDL_Event &event, bool down)
             break;
 
         case SDL_SCANCODE_RETURN:
-
             TextEdit::enter();
-
             break;
 
         case SDL_SCANCODE_BACKSPACE:
-
             TextEdit::deleteLeft();
-
             break;
 
         case SDL_SCANCODE_DELETE:
@@ -177,27 +163,34 @@ void keyCallback(SDL_Event &event, bool down)
             break;
 
         case SDL_SCANCODE_LEFT:
-
             TextEdit::moveLeft();
-
             break;
 
         case SDL_SCANCODE_RIGHT:
-
             TextEdit::moveRight();
-
             break;
 
         case SDL_SCANCODE_HOME:
-
             TextEdit::moveStart();
-
             break;
 
         case SDL_SCANCODE_END:
-
             TextEdit::moveEnd();
+            break;
 
+        case SDL_SCANCODE_UP:
+        case SDL_SCANCODE_K:
+            administerInput(INS_JUMP);
+            break;
+
+//         case SDL_SCANCODE_LEFT:
+        case SDL_SCANCODE_L:
+            administerInput(INS_TURN_LEFT);
+            break;
+
+//         case SDL_SCANCODE_RIGHT:
+        case SDL_SCANCODE_H:
+            administerInput(INS_TURN_RIGHT);
             break;
 
         default : return;
@@ -213,11 +206,12 @@ struct Asset
     u32 texture;
 };
 
-enum AssetIds
+enum AssetId
 {
     ASS_FROG,
     ASS_LILYPAD,
     ASS_ROCK,
+    ASS_SHADOW,
 
     ASS_COUNT
 };
@@ -234,6 +228,8 @@ void loadAssets()
         std::cerr << "Incorect number of assets\n";
         exit(-1);
     }
+
+    stbi_set_flip_vertically_on_load(true);
 
     for (int i = 0; i < data.modelCount; i++)
     {
@@ -267,7 +263,6 @@ void loadAssets()
 
 
         int width, height, channelCount;
-        stbi_set_flip_vertically_on_load(false);
         u8 *image = stbi_load(data.textures[i], &width, &height, &channelCount, STBI_rgb_alpha);
     
         if (!image)
@@ -307,8 +302,335 @@ void freeAssets()
 }
 
 
+
+
+
+
+const u32 MAP_X = 24;
+const u32 MAP_Y = 12;
+const u32 MAP_Z = 24;
+
+inline int getTileIndex(int x, int y, int z)
+{
+    return MAP_X * MAP_Y * ((MAP_Z / 2) + z) + MAP_X * y + (MAP_X / 2) + x;
+}
+
+enum Direction
+{
+    DIR_NORTH,
+    DIR_EAST,
+    DIR_SOUTH,
+    DIR_WEST
+};
+
+eng::Vector<2, int> moveFromDirection(Direction dir)
+{
+    switch (dir)
+    {
+        case DIR_NORTH:
+            return { 0,-1 };
+        case DIR_EAST:
+            return { 1, 0 };
+        case DIR_SOUTH:
+            return { 0, 1 };
+        case DIR_WEST:
+            return {-1, 0 };
+    }
+}
+
+Direction rotate(Direction orientation, bool left, int turnCount)
+{
+    int temp = orientation + (left ? -1 : 1) * turnCount;
+
+    if (temp < 0)
+    {
+        return (Direction)((4 - (abs(temp) % 4)) % 4);
+    }
+
+    return (Direction)(temp % 4);
+}
+
+enum TileType
+{
+    TILE_AIR,
+    TILE_OBSTACLE,
+    TILE_LILYPAD,
+    TILE_FROG,
+
+    TILE_RESERVED
+};
+
+enum Jump
+{
+    JUMP_UP,
+    JUMP_HOP,
+    JUMP_LAUNCH,
+    JUMP_GLIDE,
+    JUMP_STAY
+};
+
+struct Tile
+{
+    TileType type = TILE_AIR;
+    void *next = nullptr;
+};
+
+Tile tiles[MAP_X * MAP_Y * MAP_Z];
+
+struct Frog
+{
+    int position[3];
+    Direction orientation;
+    
+    Jump jump = JUMP_STAY;
+    int turning = 0;
+    bool jumpCanceled = false;
+
+    eng::Mat4f staticModelMatrix(float timePassed)
+    {
+        const float BREATHING = 0.025;
+        eng::Vec3f modelPosition(2.0f * position[0], 2.0f * position[1], 2.0f * position[2]);
+        return eng::Mat4f::translation(modelPosition.data)
+             * eng::Mat4f::yRotation((M_PI / 2) * orientation)
+             * eng::Mat4f::scale(1.0f, 1.0f - BREATHING + BREATHING * sin(timePassed * 2), 1.0f);
+    }
+
+    
+};
+
+struct LilyPad
+{
+    int position[3];
+    Direction orientation;
+    Frog *frog = nullptr;
+
+    Frog *reservant = nullptr;
+
+    bool turning = false;
+    bool turningLeft;
+
+    eng::Mat4f staticModelMatrix()
+    {
+        eng::Vec3f modelPosition(2.0f * position[0], 2.0f * position[1], 2.0f * position[2]);
+        return eng::Mat4f::translation(modelPosition.data)
+             * eng::Mat4f::yRotation((M_PI / 2) * orientation);
+    }
+};
+
+std::vector<eng::Vector<3, int>> rocks;
+std::vector<LilyPad*> lilyPads;
+std::vector<Frog*> frogs;
+
+void addRock(int x, int y, int z)
+{
+    rocks.push_back({ x, y, z });
+    tiles[getTileIndex(x, y, z)] = { TILE_OBSTACLE };
+}
+
+void addLilyPad(int x, int y, int z, Direction dir)
+{
+    LilyPad *newLilyPad = new LilyPad { { x, y, z }, dir };
+    lilyPads.push_back(newLilyPad);
+    tiles[getTileIndex(x, y, z)] = { TILE_LILYPAD, newLilyPad };
+}
+
+void addFrog(int x, int y, int z, Direction dir)
+{
+    Frog *newFrog = new Frog { { x, y, z }, dir };
+    frogs.push_back(newFrog);
+
+    int tileIndex = getTileIndex(x, y, z);
+
+    if (tiles[tileIndex].type == TILE_LILYPAD)
+    {
+        ((LilyPad*)(tiles[tileIndex].next))->frog = newFrog;
+    }
+    else
+    {
+        tiles[tileIndex] = { TILE_FROG, newFrog };
+    }
+}
+
+std::vector<Tile*> reservedTiles;
+
+void administerInput(Instruction instruction)
+{
+    if (instruction == INS_HOP || instruction == INS_LEAP)
+    {
+        for (Frog *frog : frogs)
+        {
+            int x = frog->position[0], z = frog->position[2];
+            int y = frog->position[1];
+
+            Tile *tTile;
+
+            eng::Vector<2, int> front = moveFromDirection(frog->orientation);
+
+            if (instruction == INS_HOP)
+            {
+                if ((tTile = &(tiles[getTileIndex(x + front[0], y, z + front[1])]))->type == TILE_AIR)
+                {
+                    tTile->type = TILE_RESERVED;
+                    tTile->next = frog;
+                    frog->jump = JUMP_HOP;
+                    continue;
+                }
+                else if (tTyle->type == TILE_RESERVED)
+                {
+                    ((Frog*)(tTyle->next))->jumpCanceled = true;
+                    frog->jump = JUMP_HOP;
+                    frog->jumpCanceled = true;
+                    continue;
+                }
+                else if (tTile->type == TILE_LILYPAD)
+                {
+                    LilyPad *lilyPad = (LilyPad*)(&(tTile->next));
+
+                    if (lilyPad->frog == nullptr)
+                    {
+                        if (lilyPad->reservant == nullptr)
+                        {
+                            lilyPad->reservant = frog;
+                            frog->jump = JUMP_HOP;
+                        }
+                        else
+                        {
+                            lilypad->reservant->jumpCanceled = true;
+                            frog->jump = JUMP_HOP;
+                            frog->jumpCanceled = true;
+                        }
+
+                        continue;
+                    }
+                }
+
+                frog->jump = JUMP_STAY;
+            }
+            else
+            {
+                if ((tTile = &(tiles[getTileIndex(x + front[0], y + 1, z + front[1])]))->type == TILE_AIR || tTiles->type == TILE_RESERVED)
+                {
+                    if ((tTile = &(tiles[getTileIndex(x + front[0], y, z + front[1])]))->type == TILE_AIR)
+                    {
+                        if ((tTile = &(tiles[getTileIndex(x, y + 1, z)]))->type == TILE_AIR || tTile->type == TILE_RESERVED)
+                        {
+                            // Maybe cancelled (leap)
+                            
+                        }
+                        else
+                        {
+                            // Bonked head (hop)
+                        }
+                    }
+                    else if(tTile->type == TILE_RESERVED)
+                    {
+                        if ((tTile = &(tiles[getTileIndex(x, y + 1, z)]))->type == TILE_AIR || tTile->type == TILE_RESERVED)
+                        {
+                            // Maybe cancelled (leap)
+                        }
+                        else
+                        {
+                            // Bonked head (canceled hop)
+                        }
+                    }
+                    else 
+                    {
+                        if (tTile->type == TILE_LILYPAD)
+                        {
+                            LilyPad *lilyPad = (LilyPad*)(&(tTile->next));
+
+                            if (lilyPad->frog == nullptr)
+                            {
+                                if (lilyPad->reservant == nullptr)
+                                {
+                                    if ((tTile = &(tiles[getTileIndex(x, y + 1, z)]))->type == TILE_AIR || tTile->type == TILE_RESERVED)
+                                    {
+                                        // Maybe cancelled (leap)
+                                    }
+                                    else
+                                    {
+                                        // Bonked head (hop, into lily pad)
+                                    }
+                                }
+                                else
+                                {
+                                    if ((tTile = &(tiles[getTileIndex(x, y + 1, z)]))->type == TILE_AIR || tTile->type == TILE_RESERVED)
+                                    {
+                                        // Maybe cancelled (leap)
+                                    }
+                                    else
+                                    {
+                                        // Bonked head (canceled hop, into lily pad)
+                                    }
+                                }
+
+                                continue;
+                            }
+                        }
+
+                        if ((tTile = &(tiles[getTileIndex(x, y + 1, z)]))->type == TILE_AIR)
+                        {
+                            // Reserve (up)
+                        }
+                        else if (tTile->type == TILE_RESERVED)
+                        {
+                            // (canceled up)
+                        }
+                        else
+                        {
+                            // (stay)
+                        }
+                    }
+                }
+                else
+                {
+                    // Kinda like hop but with end jump (up)
+                }
+            }
+        }
+    }
+    else
+    {
+        int turnDirection = instruction == INS_TURN_LEFT ? 1 :-1;
+
+        for (Frog *frog : frogs)
+        {
+            frog->turning += turnDirection;
+            int x = frog->position[0], z = frog->position[2];
+            int y = frog->position[1];
+
+            if (tiles[getTileIndex(x, y, z)].type == TILE_LILYPAD)
+            {
+                continue;
+            }
+
+            Tile *currentTile;
+
+            while (y < MAP_Y && (currentTile = &(tiles[getTileIndex(x, y, z)]))->type == TILE_FROG)
+            {
+                ((Frog *)(currentTile->next))->turning += turnDirection;
+                ++y;
+            }
+        }
+    }
+}
+
+void updateState()
+{
+    // change positions and clean up data
+}
+
+
+
+
 int main(int argc, char *argv[])
 {
+    addRock(1, 0, 1);
+    addFrog(1, 1, 1, DIR_WEST);
+    addLilyPad(-2, 1, 1, DIR_SOUTH);
+    addFrog(-2, 1, 1, DIR_EAST);
+
+
     Commander::addCommand("kek", [] (int c, char *v[])
     {
         for (int i = 0; i < c; i++)
@@ -361,7 +683,7 @@ int main(int argc, char *argv[])
 
         noiceInfo.flags = 0;
         noiceInfo.volumeL = (1.0f / COUNT) * 8;
-        noiceInfo.volumeR = (1.0f / COUNT) * 8;
+        noiceInfo.volumeR = (1.0f / COUNT) * 8 * 0;
         noiceInfo.speed = 0.25f;
 
         for (int i = 0; i < COUNT; i++)
@@ -505,25 +827,26 @@ int main(int argc, char *argv[])
             cameraPos[1] -= speed;
         }
 
-        if (KEY(UP) || KEY(K))
-        {
-            cameraRot[0] -= speed * .2f;
-        }
+//         if (KEY(UP) || KEY(K))
+//         {
+//             cameraRot[0] -= speed * .2f;
+//         }
+// 
+//         if (KEY(DOWN) || KEY(J))
+//         {
+//             cameraRot[0] += speed * .2f;
+//         }
+// 
+//         if (KEY(LEFT) || KEY(H))
+//         {
+//             cameraRot[1] -= speed * .2f;
+//         }
+// 
+//         if (KEY(RIGHT) || KEY(L))
+//         {
+//             cameraRot[1] += speed * .2f;
+//         }
 
-        if (KEY(DOWN) || KEY(J))
-        {
-            cameraRot[0] += speed * .2f;
-        }
-
-        if (KEY(LEFT) || KEY(H))
-        {
-            cameraRot[1] -= speed * .2f;
-        }
-
-        if (KEY(RIGHT) || KEY(L))
-        {
-            cameraRot[1] += speed * .2f;
-        }
         SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
 
         eng::Mat4f projMat = eng::Mat4f::GL_Projection(90.f, wWidth, wHeight, 0.1f, 100.f);
@@ -552,40 +875,64 @@ int main(int argc, char *argv[])
 
 
         glUseProgram(PRG(CLASSIC));
+        glUniformMatrix4fv(mvpMatrix, 1, false, mvpMat.data);
+        glUniform3fv(camPos, 1, cameraPos.data);
+        glUniform3f(objColor, 1.0f, 1.0f, 1.0f);
 
-        for (int i = 0; i < ASS_COUNT; i++)
+        glBindTexture(GL_TEXTURE_2D, assets[ASS_ROCK].texture);
+        glBindVertexArray(assets[ASS_ROCK].vao);
+
+        for (auto &rock : rocks)
         {
+            eng::Vec3f modelPosition(2.0f * rock[0], 2.0f * rock[1], 2.0f * rock[2]);
+            eng::Mat4f modelMatrix = eng::Mat4f::translation(modelPosition.data);
 
-            Asset &ass = assets[i];
-
-            glBindTexture(GL_TEXTURE_2D, ass.texture);
-            glBindVertexArray(ass.vao);
-
-            glUniformMatrix4fv(mvpMatrix, 1, false, mvpMat.data);
-            glUniform3fv(camPos, 1, cameraPos.data);
-            glUniform3f(objColor, 0.8f, 0.7f, 0.45f);
-
-            for (int j = 0; j < 2; j++)
-            {
-                eng::Mat4f modelMatrix = eng::Mat4f::translation(2.0f * i, 2.0f * j, 0.0f);
-
-                glUniformMatrix4fv(modMatrix, 1, false, modelMatrix.data);
+            glUniformMatrix4fv(modMatrix, 1, false, modelMatrix.data);
     
-                glDrawElements(GL_TRIANGLES, ass.indexCount, GL_UNSIGNED_INT, (void*)(0));
-            }
+            glDrawElements(GL_TRIANGLES, assets[ASS_ROCK].indexCount, GL_UNSIGNED_INT, (void*)(0));
+        }
+
+        glBindTexture(GL_TEXTURE_2D, assets[ASS_LILYPAD].texture);
+        glBindVertexArray(assets[ASS_LILYPAD].vao);
+
+        for (LilyPad *lilyPad : lilyPads)
+        {
+            glUniformMatrix4fv(modMatrix, 1, false, lilyPad->staticModelMatrix().data);
+    
+            glDrawElements(GL_TRIANGLES, assets[ASS_LILYPAD].indexCount, GL_UNSIGNED_INT, (void*)(0));
+        }
+
+        glBindTexture(GL_TEXTURE_2D, assets[ASS_FROG].texture);
+        glBindVertexArray(assets[ASS_FROG].vao);
+
+        for (Frog *frog : frogs)
+        {
+            glUniformMatrix4fv(modMatrix, 1, false, frog->staticModelMatrix(timePassed).data);
+    
+            glDrawElements(GL_TRIANGLES, assets[ASS_FROG].indexCount, GL_UNSIGNED_INT, (void*)(0));
+        }
+
+        glBindTexture(GL_TEXTURE_2D, assets[ASS_SHADOW].texture);
+        glBindVertexArray(assets[ASS_SHADOW].vao);
+
+        for (Frog *frog : frogs)
+        {
+            auto &pos = frog->position;
+
+            bool isOnLilyPad = tiles[getTileIndex(pos[0], pos[1], pos[2])].type == TILE_LILYPAD;
+            float yOffset = 0.001f + (isOnLilyPad ? (1.0f / 8) : 0.0f);
+
+            eng::Vec3f modelPosition(2.0f * pos[0], 2.0f * pos[1] + yOffset, 2.0f * pos[2]);
+            eng::Mat4f modelMatrix = eng::Mat4f::translation(modelPosition.data)
+                                   * eng::Mat4f::scale(0.8, 1.0, 0.8);
+
+            glUniformMatrix4fv(modMatrix, 1, false, modelMatrix.data);
+    
+            glDrawElements(GL_TRIANGLES, assets[ASS_SHADOW].indexCount, GL_UNSIGNED_INT, (void*)(0));
         }
 
 
         glDisable(GL_DEPTH_TEST);
-
-//         glBindVertexArray(ENG_VAO(RECTANGLE));
-//         glUseProgram(ENG_PRG(RECTANGLE));
-// 
-//         glUniform2fv(ENG_UNI(RECTANGLE_POSITION), 1, rPos.data);
-//         glUniform2fv(ENG_UNI(RECTANGLE_SCALE), 1, rScl.data);
-// 
-//         glDrawArrays(GL_TRIANGLES, 0, 6);
-
 
         if (Console::active)
         {
@@ -601,6 +948,16 @@ int main(int argc, char *argv[])
         deltaTime = (float)((tp2 - tp1).count()) / 1000000000.f;
         timePassed += deltaTime;
         tp1 = tp2;
+    }
+
+    for (LilyPad *lilyPad : lilyPads)
+    {
+        delete lilyPad;
+    }
+
+    for (Frog *frog : frogs)
+    {
+        delete frog;
     }
 
     Shader::destroy(PRG(CLASSIC), SHD(CLASSIC_VERTEX), SHD(CLASSIC_FRAGMENT));

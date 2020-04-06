@@ -57,6 +57,7 @@ void init()
 
     // Texture
     int width, height, channelCount;
+    stbi_set_flip_vertically_on_load(false);
     u8 *img = stbi_load("../cringe/charsheet.png", &width, &height, &channelCount, STBI_rgb_alpha);
     if (!img) {
         std::cerr << "Failed to load image\n";
