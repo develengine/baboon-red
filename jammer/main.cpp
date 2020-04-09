@@ -74,6 +74,8 @@ enum Instruction
 };
 
 void administerInput(Instruction instruction);
+bool computeNextState();
+void debugFrogs();
 
 void keyCallback(SDL_Event &event, bool down)
 {
@@ -180,7 +182,12 @@ void keyCallback(SDL_Event &event, bool down)
 
         case SDL_SCANCODE_UP:
         case SDL_SCANCODE_K:
-            administerInput(INS_JUMP);
+            administerInput(INS_LEAP);
+            break;
+
+        case SDL_SCANCODE_DOWN:
+        case SDL_SCANCODE_J:
+            administerInput(INS_HOP);
             break;
 
 //         case SDL_SCANCODE_LEFT:
@@ -191,6 +198,14 @@ void keyCallback(SDL_Event &event, bool down)
 //         case SDL_SCANCODE_RIGHT:
         case SDL_SCANCODE_H:
             administerInput(INS_TURN_RIGHT);
+            break;
+
+        case SDL_SCANCODE_P:
+            computeNextState();
+            break;
+
+        case SDL_SCANCODE_I:
+            debugFrogs();
             break;
 
         default : return;
@@ -328,11 +343,11 @@ eng::Vector<2, int> moveFromDirection(Direction dir)
     switch (dir)
     {
         case DIR_NORTH:
-            return { 0,-1 };
+            return { 0, 1 };
         case DIR_EAST:
             return { 1, 0 };
         case DIR_SOUTH:
-            return { 0, 1 };
+            return { 0,-1 };
         case DIR_WEST:
             return {-1, 0 };
     }
@@ -366,7 +381,8 @@ enum Jump
     JUMP_HOP,
     JUMP_LAUNCH,
     JUMP_GLIDE,
-    JUMP_STAY
+    JUMP_STAY,
+    JUMP_FALL
 };
 
 struct Tile
@@ -395,7 +411,15 @@ struct Frog
              * eng::Mat4f::scale(1.0f, 1.0f - BREATHING + BREATHING * sin(timePassed * 2), 1.0f);
     }
 
-    
+    void printDebug()
+    {
+        std::cout << "Frog\n";
+        std::cout << "position: " << position[0] << ',' << position[1] << ',' << position[2] << '\n';
+        std::cout << "orientation: " << orientation << '\n';
+        std::cout << "jump: " << jump << '\n';
+        std::cout << "turning: " << turning << '\n';
+        std::cout << "jumpCanceled: " << jumpCanceled << '\n';
+    }
 };
 
 struct LilyPad
@@ -451,12 +475,20 @@ void addFrog(int x, int y, int z, Direction dir)
     }
 }
 
-std::vector<Tile*> reservedTiles;
+void debugFrogs()
+{
+    for (Frog *frog : frogs)
+    {
+        frog->printDebug();
+    }
+}
 
 void administerInput(Instruction instruction)
 {
     if (instruction == INS_HOP || instruction == INS_LEAP)
     {
+        // TODO make sure that frogs can't go outside of the map
+
         for (Frog *frog : frogs)
         {
             int x = frog->position[0], z = frog->position[2];
@@ -468,35 +500,33 @@ void administerInput(Instruction instruction)
 
             if (instruction == INS_HOP)
             {
+                frog->jump = JUMP_HOP;
+
                 if ((tTile = &(tiles[getTileIndex(x + front[0], y, z + front[1])]))->type == TILE_AIR)
                 {
                     tTile->type = TILE_RESERVED;
                     tTile->next = frog;
-                    frog->jump = JUMP_HOP;
                     continue;
                 }
-                else if (tTyle->type == TILE_RESERVED)
+                else if (tTile->type == TILE_RESERVED)
                 {
-                    ((Frog*)(tTyle->next))->jumpCanceled = true;
-                    frog->jump = JUMP_HOP;
+                    ((Frog*)(tTile->next))->jumpCanceled = true;
                     frog->jumpCanceled = true;
                     continue;
                 }
                 else if (tTile->type == TILE_LILYPAD)
                 {
-                    LilyPad *lilyPad = (LilyPad*)(&(tTile->next));
+                    LilyPad *lilyPad = (LilyPad*)(tTile->next);
 
                     if (lilyPad->frog == nullptr)
                     {
                         if (lilyPad->reservant == nullptr)
                         {
                             lilyPad->reservant = frog;
-                            frog->jump = JUMP_HOP;
                         }
                         else
                         {
-                            lilypad->reservant->jumpCanceled = true;
-                            frog->jump = JUMP_HOP;
+                            lilyPad->reservant->jumpCanceled = true;
                             frog->jumpCanceled = true;
                         }
 
@@ -508,84 +538,83 @@ void administerInput(Instruction instruction)
             }
             else
             {
-                if ((tTile = &(tiles[getTileIndex(x + front[0], y + 1, z + front[1])]))->type == TILE_AIR || tTiles->type == TILE_RESERVED)
+                Tile *destination = &(tiles[getTileIndex(x + front[0], y + 1, z + front[1])]);
+                Tile *ahead = &(tiles[getTileIndex(x + front[0], y, z + front[1])]);
+                Tile *above = &(tiles[getTileIndex(x, y + 1, z)]);
+
+                bool destinationIsViable = destination->type == TILE_AIR || destination->type == TILE_RESERVED;
+                bool aboveIsViable = above->type == TILE_AIR || above->type == TILE_RESERVED;
+                bool aheadIsViable = ahead->type == TILE_AIR || ahead->type == TILE_RESERVED || (ahead->type == TILE_LILYPAD && ((LilyPad*)(ahead->next))->frog == nullptr);
+
+                if (destinationIsViable && aboveIsViable && aheadIsViable)
                 {
-                    if ((tTile = &(tiles[getTileIndex(x + front[0], y, z + front[1])]))->type == TILE_AIR)
-                    {
-                        if ((tTile = &(tiles[getTileIndex(x, y + 1, z)]))->type == TILE_AIR || tTile->type == TILE_RESERVED)
-                        {
-                            // Maybe cancelled (leap)
-                            
-                        }
-                        else
-                        {
-                            // Bonked head (hop)
-                        }
-                    }
-                    else if(tTile->type == TILE_RESERVED)
-                    {
-                        if ((tTile = &(tiles[getTileIndex(x, y + 1, z)]))->type == TILE_AIR || tTile->type == TILE_RESERVED)
-                        {
-                            // Maybe cancelled (leap)
-                        }
-                        else
-                        {
-                            // Bonked head (canceled hop)
-                        }
-                    }
-                    else 
-                    {
-                        if (tTile->type == TILE_LILYPAD)
-                        {
-                            LilyPad *lilyPad = (LilyPad*)(&(tTile->next));
+                    frog->jump = JUMP_LAUNCH;
 
-                            if (lilyPad->frog == nullptr)
-                            {
-                                if (lilyPad->reservant == nullptr)
-                                {
-                                    if ((tTile = &(tiles[getTileIndex(x, y + 1, z)]))->type == TILE_AIR || tTile->type == TILE_RESERVED)
-                                    {
-                                        // Maybe cancelled (leap)
-                                    }
-                                    else
-                                    {
-                                        // Bonked head (hop, into lily pad)
-                                    }
-                                }
-                                else
-                                {
-                                    if ((tTile = &(tiles[getTileIndex(x, y + 1, z)]))->type == TILE_AIR || tTile->type == TILE_RESERVED)
-                                    {
-                                        // Maybe cancelled (leap)
-                                    }
-                                    else
-                                    {
-                                        // Bonked head (canceled hop, into lily pad)
-                                    }
-                                }
-
-                                continue;
-                            }
-                        }
-
-                        if ((tTile = &(tiles[getTileIndex(x, y + 1, z)]))->type == TILE_AIR)
-                        {
-                            // Reserve (up)
-                        }
-                        else if (tTile->type == TILE_RESERVED)
-                        {
-                            // (canceled up)
-                        }
-                        else
-                        {
-                            // (stay)
-                        }
+                    if (destination->type == TILE_RESERVED)
+                    {
+                        ((Frog*)(destination->next))->jumpCanceled = true;
+                        frog->jumpCanceled = true;
                     }
+                    else
+                    {
+                        destination->type = TILE_RESERVED;
+                        destination->next = frog;
+                    }
+
+                    continue;
                 }
-                else
+
+                if (aheadIsViable)
                 {
-                    // Kinda like hop but with end jump (up)
+                    frog->jump = JUMP_HOP;
+
+                    if (ahead->type == TILE_RESERVED)
+                    {
+                        ((Frog*)(ahead->next))->jumpCanceled = true;
+                        frog->jumpCanceled = true;
+                    }
+                    else if (ahead->type == TILE_LILYPAD)
+                    {
+                        LilyPad *lilyPad = (LilyPad*)(ahead->next);
+
+                        if (lilyPad->reservant == nullptr)
+                        {
+                            lilyPad->reservant = frog;
+                        }
+                        else
+                        {
+                            lilyPad->reservant->jumpCanceled = true;
+                            frog->jumpCanceled = true;
+                        }
+                    }
+                    else
+                    {
+                        ahead->type = TILE_RESERVED;
+                        ahead->next = frog;
+                    }
+
+                    continue;
                 }
+
+                if (aboveIsViable)
+                {
+                    frog->jump = JUMP_UP;
+
+                    if (above->type == TILE_RESERVED)
+                    {
+                        ((Frog*)(above->next))->jumpCanceled = true;
+                        frog->jumpCanceled = true;
+                    }
+                    else
+                    {
+                        above->type = TILE_RESERVED;
+                        above->next = frog;
+                    }
+
+                    continue;
+                }
+
+                frog->jump = JUMP_STAY;
             }
         }
     }
@@ -595,29 +624,214 @@ void administerInput(Instruction instruction)
 
         for (Frog *frog : frogs)
         {
-            frog->turning += turnDirection;
             int x = frog->position[0], z = frog->position[2];
             int y = frog->position[1];
 
-            if (tiles[getTileIndex(x, y, z)].type == TILE_LILYPAD)
+            Tile *currentTile;
+
+            if ((currentTile = &(tiles[getTileIndex(x, y, z)]))->type == TILE_LILYPAD)
             {
                 continue;
             }
 
-            Tile *currentTile;
-
-            while (y < MAP_Y && (currentTile = &(tiles[getTileIndex(x, y, z)]))->type == TILE_FROG)
+            while (y < MAP_Y && currentTile->type == TILE_FROG)
             {
-                ((Frog *)(currentTile->next))->turning += turnDirection;
+                ((Frog*)(currentTile->next))->turning += turnDirection;
                 ++y;
+                currentTile = &(tiles[getTileIndex(x, y, z)]);
             }
         }
     }
 }
 
-void updateState()
+bool computeNextState()
 {
-    // change positions and clean up data
+    for (Frog *frog : frogs)
+    {
+        frog->orientation = rotate(frog->orientation, true, frog->turning);
+        frog->turning = 0;
+
+        int x = frog->position[0], y = frog->position[1], z = frog->position[2];
+        eng::Vector<2, int> front = moveFromDirection(frog->orientation);
+
+        eng::Vector<3, int> destination;
+
+        switch (frog->jump)
+        {
+            case JUMP_HOP:
+                destination = { x + front[0], y, z + front[1] };
+                break;
+
+            case JUMP_UP:
+                destination = { x, y + 1, z };
+                break;
+
+            case JUMP_LAUNCH:
+                destination = { x + front[0], y + 1, z + front[1] };
+                break;
+
+            case JUMP_FALL:
+                destination = { x, y - 1, z };
+                break;
+
+            case JUMP_GLIDE:
+                destination = { x + front[0], y - 1, z + front[1] };
+                break;
+
+            case JUMP_STAY:
+                continue;
+
+            default:
+                continue;
+        }
+
+        if (frog->jumpCanceled)
+        {
+            Tile *reserved = &(tiles[getTileIndex(destination[0], destination[1], destination[2])]);
+
+            if (reserved->type == TILE_RESERVED)
+            {
+                reserved->type = TILE_AIR;
+                reserved->next = nullptr;
+            }
+            else if (reserved->type == TILE_LILYPAD)
+            {
+                ((LilyPad*)(reserved->next))->reservant = nullptr;
+            }
+
+            frog->jump = JUMP_STAY;
+            frog->jumpCanceled = false;
+        }
+        else
+        {
+            Tile *tTile;
+
+            if ((tTile = &(tiles[getTileIndex(x, y, z)]))->type == TILE_LILYPAD)
+            {
+                LilyPad *lilyPad = (LilyPad*)(tTile->next);
+                lilyPad->frog = nullptr;
+                lilyPad->reservant = nullptr;
+            }
+            else
+            {
+                tTile->type = TILE_AIR;
+                tTile->next = nullptr;
+            }
+
+            memcpy(frog->position, destination.data, sizeof(destination));
+
+            if ((tTile = &(tiles[getTileIndex(destination[0], destination[1], destination[2])]))->type == TILE_LILYPAD)
+            {
+                LilyPad *lilyPad = (LilyPad*)(tTile->next);
+                lilyPad->frog = frog;
+                lilyPad->reservant = nullptr;
+            }
+            else
+            {
+                tTile->type = TILE_FROG;
+                tTile->next = frog;
+            }
+        }
+    }
+
+    bool isStatic = true;
+
+    for (Frog *frog : frogs)
+    {
+        int x = frog->position[0], y = frog->position[1], z = frog->position[2];
+        eng::Vector<2, int> front = moveFromDirection(frog->orientation);
+
+        if ((frog->jump == JUMP_LAUNCH || frog->jump == JUMP_GLIDE) && y > 0 && tiles[getTileIndex(x, y, z)].type != TILE_LILYPAD)
+        {
+            Tile *destination = &(tiles[getTileIndex(x + front[0], y - 1, z + front[1])]);
+            Tile *below = &(tiles[getTileIndex(x, y - 1, z)]);
+            Tile *ahead = &(tiles[getTileIndex(x + front[0], y, z + front[1])]);
+            
+            bool destinationIsViable = destination->type == TILE_AIR || destination->type == TILE_RESERVED || (destination->type == TILE_LILYPAD && ((LilyPad*)(destination->next))->frog == nullptr);
+            bool belowIsViable = below->type == TILE_AIR || below->type == TILE_RESERVED || (below->type == TILE_LILYPAD && ((LilyPad*)(below->next))->frog == nullptr);
+            bool aheadIsViable = ahead->type == TILE_AIR || ahead->type == TILE_RESERVED;
+
+            if (destinationIsViable && belowIsViable && aheadIsViable)
+            {
+                frog->jump = JUMP_GLIDE;
+
+                if (destination->type == TILE_RESERVED)
+                {
+                    ((Frog*)(destination->next))->jumpCanceled = true;
+                    frog->jumpCanceled = true;
+                }
+                else if (destination->type == TILE_LILYPAD)
+                {
+                    LilyPad *lilyPad = (LilyPad*)(destination->next);
+
+                    if (lilyPad->reservant == nullptr)
+                    {
+                        lilyPad->reservant = frog;
+                    }
+                    else
+                    {
+                        ((Frog*)(lilyPad->reservant))->jumpCanceled = true;
+                        frog->jumpCanceled = true;
+                    }
+                }
+                else
+                {
+                    destination->type = TILE_RESERVED;
+                    destination->next = frog;
+                }
+
+                isStatic = false;
+                continue;
+            }
+        }
+
+        if (y > 0 && tiles[getTileIndex(x, y, z)].type != TILE_LILYPAD)
+        {
+            Tile *below = &(tiles[getTileIndex(x, y - 1, z)]);
+    
+            frog->jump = JUMP_FALL;
+    
+            if (below->type == TILE_AIR)
+            {
+                below->type = TILE_RESERVED;
+                below->next = frog;
+                isStatic = false;
+                continue;
+            }
+            else if (below->type == TILE_RESERVED)
+            {
+                ((Frog*)(below->next))->jumpCanceled = true;
+                frog->jumpCanceled = true;
+                isStatic = false;
+                continue;
+            }
+            else if (below->type == TILE_LILYPAD)
+            {
+                LilyPad *lilyPad;
+    
+                if ((lilyPad = (LilyPad*)(below->next))->frog == nullptr)
+                {
+                    if (lilyPad->reservant == nullptr)
+                    {
+                        lilyPad->reservant = frog;
+                    }
+                    else
+                    {
+                        ((Frog*)(lilyPad->reservant))->jumpCanceled = true;
+                        frog->jumpCanceled = true;
+                    }
+    
+                    isStatic = false;
+                    continue;
+                }
+            }
+        }
+
+        frog->jump = JUMP_STAY;
+    }
+
+    std::cout << isStatic << '\n';
+    return isStatic;
 }
 
 
@@ -626,10 +840,13 @@ void updateState()
 int main(int argc, char *argv[])
 {
     addRock(1, 0, 1);
+    addRock(0, 0, 1);
+    addRock(-1, 0, 1);
     addFrog(1, 1, 1, DIR_WEST);
+    addFrog(1, 2, 1, DIR_WEST);
     addLilyPad(-2, 1, 1, DIR_SOUTH);
     addFrog(-2, 1, 1, DIR_EAST);
-
+//     addRock(-1, 1, 1);
 
     Commander::addCommand("kek", [] (int c, char *v[])
     {
