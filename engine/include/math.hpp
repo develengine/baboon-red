@@ -152,6 +152,13 @@ namespace eng {
             return output;
         }
 
+        inline bool operator==(const Vector &b) const {
+            for (int i = 0; i < D; i++)
+                if ((*this)[i] != b[i])
+                    return false;
+            return true;
+        }
+
         friend std::ostream& operator<<(std::ostream &stream, const Vector &a) {
             stream << "[ " << a[0];
             for (int i = 1; i < D; i++)

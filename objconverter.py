@@ -1,7 +1,7 @@
 from sys import argv
 from struct import pack
 
-# python3 objconverter.py jammer/res/neofrog.obj:jammer/res/frog2.png jammer/res/lilypad.obj:jammer/res/lilypad.png jammer/res/rock.obj:jammer/res/rock.png jammer/res/shadow.obj:jammer/res/shadow.png -o jammer/res/models.bin
+# python3 objconverter.py jammer/res/neofrog.obj:jammer/res/frog2.png jammer/res/lilypad.obj:jammer/res/lilypad.png jammer/res/rock.obj:jammer/res/rock.png jammer/res/select.obj:jammer/res/select.png jammer/res/shadow.obj:jammer/res/shadow.png -o jammer/res/models.bin
 
 class Model:
     def __init__(self, name):

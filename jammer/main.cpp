@@ -63,6 +63,9 @@ const u32 FULLSCREEN = SDL_WINDOW_FULLSCREEN_DESKTOP;
 
 bool cursorEnabled = false;
 
+bool levelEditMode = true;
+bool inputEnabled = false;
+
 enum Instruction
 {
     INS_HOP,
@@ -182,26 +185,38 @@ void keyCallback(SDL_Event &event, bool down)
 
         case SDL_SCANCODE_UP:
         case SDL_SCANCODE_K:
-            administerInput(INS_LEAP);
+            if (!inputEnabled)
+            {
+                administerInput(INS_LEAP);
+                inputEnabled = true;
+            }
             break;
 
         case SDL_SCANCODE_DOWN:
         case SDL_SCANCODE_J:
-            administerInput(INS_HOP);
+            if (!inputEnabled)
+            {
+                administerInput(INS_HOP);
+                inputEnabled = true;
+            }
             break;
 
 //         case SDL_SCANCODE_LEFT:
         case SDL_SCANCODE_L:
-            administerInput(INS_TURN_LEFT);
+            if (!inputEnabled)
+            {
+                administerInput(INS_TURN_LEFT);
+                inputEnabled = true;
+            }
             break;
 
 //         case SDL_SCANCODE_RIGHT:
         case SDL_SCANCODE_H:
-            administerInput(INS_TURN_RIGHT);
-            break;
-
-        case SDL_SCANCODE_P:
-            computeNextState();
+            if (!inputEnabled)
+            {
+                administerInput(INS_TURN_RIGHT);
+                inputEnabled = true;
+            }
             break;
 
         case SDL_SCANCODE_I:
@@ -226,6 +241,7 @@ enum AssetId
     ASS_FROG,
     ASS_LILYPAD,
     ASS_ROCK,
+    ASS_SELECT,
     ASS_SHADOW,
 
     ASS_COUNT
@@ -365,6 +381,18 @@ Direction rotate(Direction orientation, bool left, int turnCount)
     return (Direction)(temp % 4);
 }
 
+int loopAround(int original, int maximum, int offset)
+{
+    int temp = original + offset;
+
+    if (temp < 0)
+    {
+        return (maximum - (abs(temp) % maximum)) % maximum;
+    }
+
+    return temp % maximum;
+}
+
 enum TileType
 {
     TILE_AIR,
@@ -395,7 +423,7 @@ Tile tiles[MAP_X * MAP_Y * MAP_Z];
 
 struct Frog
 {
-    int position[3];
+    eng::Vector<3, int> position;
     Direction orientation;
     
     Jump jump = JUMP_STAY;
@@ -424,7 +452,7 @@ struct Frog
 
 struct LilyPad
 {
-    int position[3];
+    eng::Vector<3, int> position;
     Direction orientation;
     Frog *frog = nullptr;
 
@@ -455,7 +483,21 @@ void addLilyPad(int x, int y, int z, Direction dir)
 {
     LilyPad *newLilyPad = new LilyPad { { x, y, z }, dir };
     lilyPads.push_back(newLilyPad);
-    tiles[getTileIndex(x, y, z)] = { TILE_LILYPAD, newLilyPad };
+
+    Tile *tile = &(tiles[getTileIndex(x, y, z)]);
+
+    if (tile->type == TILE_FROG)
+    {
+        Frog *frog = (Frog*)(tile->next);
+        tile->type = TILE_LILYPAD;
+        tile->next = newLilyPad;
+        newLilyPad->frog = frog;
+    }
+    else
+    {
+        tile->type = TILE_LILYPAD;
+        tile->next = newLilyPad;
+    }
 }
 
 void addFrog(int x, int y, int z, Direction dir)
@@ -463,15 +505,16 @@ void addFrog(int x, int y, int z, Direction dir)
     Frog *newFrog = new Frog { { x, y, z }, dir };
     frogs.push_back(newFrog);
 
-    int tileIndex = getTileIndex(x, y, z);
+    Tile *tile = &(tiles[getTileIndex(x, y, z)]);
 
-    if (tiles[tileIndex].type == TILE_LILYPAD)
+    if (tile->type == TILE_LILYPAD)
     {
-        ((LilyPad*)(tiles[tileIndex].next))->frog = newFrog;
+        ((LilyPad*)(tile->next))->frog = newFrog;
     }
     else
     {
-        tiles[tileIndex] = { TILE_FROG, newFrog };
+        tile->type = TILE_FROG;
+        tile->next = newFrog;
     }
 }
 
@@ -493,6 +536,11 @@ void administerInput(Instruction instruction)
         {
             int x = frog->position[0], z = frog->position[2];
             int y = frog->position[1];
+
+            if (y <= 0)
+            {
+                continue;
+            }
 
             Tile *tTile;
 
@@ -718,7 +766,7 @@ bool computeNextState()
                 tTile->next = nullptr;
             }
 
-            memcpy(frog->position, destination.data, sizeof(destination));
+            frog->position = destination;
 
             if ((tTile = &(tiles[getTileIndex(destination[0], destination[1], destination[2])]))->type == TILE_LILYPAD)
             {
@@ -830,7 +878,6 @@ bool computeNextState()
         frog->jump = JUMP_STAY;
     }
 
-    std::cout << isStatic << '\n';
     return isStatic;
 }
 
@@ -992,19 +1039,149 @@ int main(int argc, char *argv[])
     int wWidth, wHeight;
     SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
 
+    eng::Vec3f lookDir = { 0.f, 0.f,-1.f };
+    float reach = 6.0;
+    AssetId holding = ASS_FROG;
+    Direction facing = DIR_NORTH;
+    bool rotateClick = false;
+    bool interactClick = false;
+
+
     Application::setMouseMotionCallback([&](SDL_Event &event)
     {
         if (cursorEnabled) return;
 
         cameraRot[0] += (float)(event.motion.yrel) / 256.f;
         cameraRot[1] += (float)(event.motion.xrel) / 256.f;
+
+        lookDir = { sin(cameraRot[1]),-sin(cameraRot[0]),-cos(cameraRot[0]) * cos(cameraRot[1]) };
     });
 
+
+    Application::setMouseWheelCallback([&](SDL_Event &event)
+    {
+        holding = (AssetId)(loopAround(holding, 4, event.wheel.y));
+    });
+
+
+    Application::setMouseButtonCallback([&](SDL_Event &event, bool down)
+    {
+        SDL_MouseButtonEvent &be = event.button;
+
+        if (levelEditMode)
+        {
+            if ((u32)(be.button) == 1)
+            {
+                if (interactClick)
+                {
+                    interactClick = false;
+                }
+                else
+                {
+                    eng::Vec3f pointing = (cameraPos + (lookDir * reach)) * 0.5f;
+                    eng::Vector<3, int> lookingAt = { (int)(pointing[0]), (int)(pointing[1]), (int)(pointing[2]) };
+
+                    if (lookingAt[1] < 0)
+                    {
+                        return;
+                    }
+    
+                    Tile *lookedAt = &(tiles[getTileIndex(lookingAt[0], lookingAt[1], lookingAt[2])]);
+    
+                    switch (holding)
+                    {
+                        case ASS_ROCK:
+                            addRock(lookingAt[0], lookingAt[1], lookingAt[2]);
+                            break;
+    
+                        case ASS_FROG:
+                            addFrog(lookingAt[0], lookingAt[1], lookingAt[2], facing);
+                            break;
+    
+                        case ASS_LILYPAD:
+                            addLilyPad(lookingAt[0], lookingAt[1], lookingAt[2], facing);
+                            break;
+    
+                        case ASS_SELECT:
+    
+                            for (int i = 0; i < rocks.size(); i++)
+                            {
+                                if (rocks[i] == lookingAt)
+                                {
+                                    rocks.erase(rocks.begin() + i);
+                                    break;
+                                }
+                            }
+            
+                            for (int i = 0; i < frogs.size(); i++)
+                            {
+                                if (frogs[i]->position == lookingAt)
+                                {
+                                    delete frogs[i];
+                                    frogs.erase(frogs.begin() + i);
+                                    break;
+                                }
+                            }
+            
+                            for (int i = 0; i < lilyPads.size(); i++)
+                            {
+                                if (lilyPads[i]->position == lookingAt)
+                                {
+                                    delete lilyPads[i];
+                                    lilyPads.erase(lilyPads.begin() + i);
+                                    break;
+                                }
+                            }
+    
+                            lookedAt->type = TILE_AIR;
+                            lookedAt->next = nullptr;
+
+                            break;
+    
+                        default:
+                            break;
+                    }
+
+                    interactClick = true;
+                }
+            }
+            else if ((u32)(be.button) == 3)
+            {
+                if (rotateClick)
+                {
+                    rotateClick = false;
+                }
+                else
+                {
+                    facing = rotate(facing, true, 1);
+                    rotateClick = true;
+                }
+            }
+        }
+    });
+
+
     glActiveTexture(GL_TEXTURE0);
+
+
+    auto timeoutStart = std::chrono::high_resolution_clock::now();
+
 
     while (Application::running)
     {
         Application::pollEvents();
+
+
+        if (inputEnabled && (std::chrono::high_resolution_clock::now() - timeoutStart).count() > 500000000)
+        {
+            timeoutStart = std::chrono::high_resolution_clock::now();
+
+            if (computeNextState())
+            {
+                inputEnabled = false;
+            }
+        }
+
 
         float speed = 15.0f * deltaTime;
         float cosVel = cos(cameraRot[1]) * speed;
@@ -1044,32 +1221,12 @@ int main(int argc, char *argv[])
             cameraPos[1] -= speed;
         }
 
-//         if (KEY(UP) || KEY(K))
-//         {
-//             cameraRot[0] -= speed * .2f;
-//         }
-// 
-//         if (KEY(DOWN) || KEY(J))
-//         {
-//             cameraRot[0] += speed * .2f;
-//         }
-// 
-//         if (KEY(LEFT) || KEY(H))
-//         {
-//             cameraRot[1] -= speed * .2f;
-//         }
-// 
-//         if (KEY(RIGHT) || KEY(L))
-//         {
-//             cameraRot[1] += speed * .2f;
-//         }
-
         SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
 
         eng::Mat4f projMat = eng::Mat4f::GL_Projection(90.f, wWidth, wHeight, 0.1f, 100.f);
         eng::Mat4f viewMat = eng::Mat4f::xRotation(cameraRot[0])
-            * eng::Mat4f::yRotation(cameraRot[1])
-            * eng::Mat4f::translation((-cameraPos).data);
+                           * eng::Mat4f::yRotation(cameraRot[1])
+                           * eng::Mat4f::translation((-cameraPos).data);
 
         eng::Mat4f mvpMat = projMat * viewMat;
 
@@ -1146,6 +1303,23 @@ int main(int argc, char *argv[])
             glUniformMatrix4fv(modMatrix, 1, false, modelMatrix.data);
     
             glDrawElements(GL_TRIANGLES, assets[ASS_SHADOW].indexCount, GL_UNSIGNED_INT, (void*)(0));
+        }
+
+        if (levelEditMode)
+        {
+            eng::Vec3f pointing = (cameraPos + (lookDir * reach)) * 0.5f;
+            eng::Vector<3, int> lookingAt = { (int)(pointing[0]), (int)(pointing[1]), (int)(pointing[2]) };
+
+            glBindTexture(GL_TEXTURE_2D, assets[holding].texture);
+            glBindVertexArray(assets[holding].vao);
+
+            eng::Vec3f modelPosition(2.0f * lookingAt[0], 2.0f * lookingAt[1], 2.0f * lookingAt[2]);
+            eng::Mat4f modelMatrix = eng::Mat4f::translation(modelPosition.data)
+                                   * eng::Mat4f::yRotation((M_PI / 2) * facing);
+
+            glUniformMatrix4fv(modMatrix, 1, false, modelMatrix.data);
+    
+            glDrawElements(GL_TRIANGLES, assets[holding].indexCount, GL_UNSIGNED_INT, (void*)(0));
         }
 
 

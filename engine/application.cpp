@@ -13,9 +13,14 @@ SDL_Window *window = nullptr;
 SDL_GLContext context;
 bool running = true;
 
+std::string windowName("EngineTech");
+int windowWidth = 1080;
+int windowHeight = 720;
+
 std::function<void(SDL_Event&, bool)> keyCallback = nullptr;
 std::function<void(SDL_Event&)> mouseMotionCallback = nullptr;
 std::function<void(SDL_Event&, bool)> mouseButtonCallback = nullptr;
+std::function<void(SDL_Event&)> mouseWheelCallback = nullptr;
 
 void setInitFlag(u32 flag)
 {
@@ -35,6 +40,32 @@ void setMouseMotionCallback(std::function<void(SDL_Event&)> f)
 void setMouseButtonCallback(std::function<void(SDL_Event&, bool)> f)
 {
     mouseButtonCallback = f;
+}
+
+void setMouseWheelCallback(std::function<void(SDL_Event&)> f)
+{
+    mouseWheelCallback = f;
+}
+
+void setWindowName(const char *name)
+{
+    windowName = name;
+
+    if (window != nullptr)
+    {
+        SDL_SetWindowTitle(window, windowName.c_str());
+    }
+}
+
+void setWindowSize(int width, int height)
+{
+    windowWidth = width;
+    windowHeight = height;
+
+    if (window != nullptr)
+    {
+        SDL_SetWindowSize(window, width, height);
+    }
 }
 
 void GLAPIENTRY openglCallback( GLenum source,
@@ -103,6 +134,15 @@ void pollEvents()
 
                 break;
 
+            case SDL_MOUSEWHEEL:
+
+                if (mouseWheelCallback != nullptr)
+                {
+                    mouseWheelCallback(event);
+                }
+
+                break;
+
             case SDL_TEXTINPUT:
 
 //                 std::cout << event.text.text << '\n';
@@ -148,9 +188,9 @@ void init()
     SDL_GL_LoadLibrary(NULL);
 
     window = SDL_CreateWindow(
-        "bones.",
+        windowName.c_str(),
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        1080, 720,
+        windowWidth, windowHeight,
         SDL_WINDOW_OPENGL
     );
 

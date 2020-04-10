@@ -15,6 +15,9 @@ void init();
 void setKeyCallback(std::function<void(SDL_Event&, bool)> f);
 void setMouseMotionCallback(std::function<void(SDL_Event&)> f);
 void setMouseButtonCallback(std::function<void(SDL_Event&, bool)> f);
+void setMouseWheelCallback(std::function<void(SDL_Event&)> f);
+void setWindowName(const char *name);
+void setWindowSize(int width, int height);
 void pollEvents();
 void close();
 
